@@ -17,8 +17,11 @@ def coco_evaluation(gt_file, pred_file):
     coco_eval.summarize()
 
 # File paths
-gt_file = 'C:/Users/ben93/Downloads/CombinedDatasetsChallenge/CombinedDatasetsChallenge/val_annotations.json'
-pred_file = 'C:/Users/ben93/PycharmProjects/yolov7/onnx_json_prediction.json'
+gt_file = r"C:\Users\ben93\Downloads\BoaTetection_public\BoaTetection_public\BoaTetection_val_annotations.json"
+# gt_file = 'C:/Users/ben93/Downloads/CombinedDatasetsChallenge/CombinedDatasetsChallenge/val_annotations.json'
+pred_file = 'C:/Users/ben93/PycharmProjects/yolov7/onnx_json_prediction_old.json'
+# pred_file = 'C:/Users/ben93/PycharmProjects/yolov7/onnx_json_prediction.json'
+# pred_file = r"C:\Users\ben93\Downloads\onnx_json_prediction_val.json"
 
 # Evaluate
 coco_evaluation(gt_file, pred_file)

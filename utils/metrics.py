@@ -123,15 +123,15 @@ class ConfusionMatrix:
         Return intersection-over-union (Jaccard index) of boxes.
         Both sets of boxes are expected to be in (x1, y1, x2, y2) format.
         Arguments:
-            detections (Array[N, 6]), x1, y1, x2, y2, conf, class
-            labels (Array[M, 5]), class, x1, y1, x2, y2
+            detections (Array[N, 6]), x1, y1, x2, y2, conf, class, distance
+            labels (Array[M, 5]), class, x1, y1, x2, y2, distance
         Returns:
             None, updates confusion matrix accordingly
         """
         detections = detections[detections[:, 4] > self.conf]
         gt_classes = labels[:, 0].int()
         detection_classes = detections[:, 5].int()
-        iou = general.box_iou(labels[:, 1:], detections[:, :4])
+        iou = general.box_iou(labels[:, 1:-1], detections[:, :4])
 
         x = torch.where(iou > self.iou_thres)
         if x[0].shape[0]:

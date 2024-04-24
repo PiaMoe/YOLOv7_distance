@@ -51,7 +51,7 @@ def letterbox(im, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleu
 names = ['boats','other']
 colors = {name:[random.randint(0, 255) for _ in range(3)] for i,name in enumerate(names)}
 
-img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+# img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
 image = img.copy()
 image, ratio, dwdh = letterbox(image, auto=False)

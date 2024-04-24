@@ -37,7 +37,8 @@ def letterbox(im, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleu
     return im, r, (dw, dh)
 
 
-w = r"C:\Users\ben93\PycharmProjects\yolov7\DL23\DL239\weights\best.onnx"
+w = r"C:\Users\ben93\Downloads\upload.onnx"
+# w = r"C:\Users\ben93\PycharmProjects\yolov7\DL23\DL239\weights\best.onnx"
 base_dir = r"C:\Users\ben93\Downloads\CombinedDatasetsChallenge\CombinedDatasetsChallenge\images\val"
 
 img_list = sorted(os.listdir(base_dir))
@@ -102,17 +103,17 @@ for img_path in img_list:
         cv2.rectangle(image,box[:2],box[2:],color,2)
         cv2.putText(image,name,(box[0], box[1] - 2),cv2.FONT_HERSHEY_SIMPLEX,0.75,[225, 255, 255],thickness=2)
 
-    if outputs.shape[0]==0:
-        cv2.imshow("image ", ori_images[0])
-    else:
-        cv2.imshow("image ", image)
-    cv2.waitKey(0)
+    # if outputs.shape[0]==0:
+    #     cv2.imshow("image ", ori_images[0])
+    # else:
+    #     cv2.imshow("image ", image)
+    # cv2.waitKey(0)
 
 
 print(jdict)
 
 
-with open("onnx_json_prediction.json","w") as f:
+with open("onnx_json_prediction_old.json","w") as f:
     json.dump(jdict, f)
 
 

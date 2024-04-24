@@ -429,6 +429,7 @@ class ComputeLoss:
         # Define criteria
         BCEcls = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([h['cls_pw']], device=device))
         BCEobj = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([h['obj_pw']], device=device))
+        self.MSEdist = nn.MSELoss()
 
         # Class label smoothing https://arxiv.org/pdf/1902.04103.pdf eqn 3
         self.cp, self.cn = smooth_BCE(eps=h.get('label_smoothing', 0.0))  # positive, negative BCE targets
@@ -450,7 +451,10 @@ class ComputeLoss:
     def __call__(self, p, targets):  # predictions, targets, model
         device = targets.device
         lcls, lbox, lobj = torch.zeros(1, device=device), torch.zeros(1, device=device), torch.zeros(1, device=device)
-        tcls, tbox, indices, anchors = self.build_targets(p, targets)  # targets
+        ldist = torch.zeros(1, device=device)
+        detection_targets = targets[:, :-1]  # Exclude the distance
+        distance_targets = targets[:, -1]  # Extract the distance
+        tcls, tbox, indices, anchors = self.build_targets(p, detection_targets)  # targets
 
         # Losses
         for i, pi in enumerate(p):  # layer index, layer predictions
@@ -470,6 +474,14 @@ class ComputeLoss:
 
                 # Objectness
                 tobj[b, a, gj, gi] = (1.0 - self.gr) + self.gr * iou.detach().clamp(0).type(tobj.dtype)  # iou ratio
+
+                #distances
+                pdist = ps[:, -1]  # assuming the last element is distance
+                # ldist += self.MSEdist(pdist, distance_targets[b, a, gj, gi])  # You need to ensure indices match here
+                matched_distance_targets = distance_targets[b]  # This is likely incorrect; you need a correct method here
+
+                # Calculate MSE loss for distances
+                ldist += self.MSEdist(pdist, matched_distance_targets)
 
                 # Classification
                 if self.nc > 1:  # cls loss (only if multiple classes)
@@ -492,10 +504,11 @@ class ComputeLoss:
         lbox *= self.hyp['box']
         lobj *= self.hyp['obj']
         lcls *= self.hyp['cls']
+        ldist *= 0.05
         bs = tobj.shape[0]  # batch size
 
-        loss = lbox + lobj + lcls
-        return loss * bs, torch.cat((lbox, lobj, lcls, loss)).detach()
+        loss = lbox + lobj + lcls + ldist
+        return loss * bs, torch.cat((lbox, lobj, lcls, ldist, loss)).detach()
 
     def build_targets(self, p, targets):
         # Build targets for compute_loss(), input targets(image,class,x,y,w,h)
@@ -563,7 +576,7 @@ class ComputeLossOTA:
         # Define criteria
         BCEcls = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([h['cls_pw']], device=device))
         BCEobj = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([h['obj_pw']], device=device))
-
+        self.MSEdist = nn.MSELoss()
         # Class label smoothing https://arxiv.org/pdf/1902.04103.pdf eqn 3
         self.cp, self.cn = smooth_BCE(eps=h.get('label_smoothing', 0.0))  # positive, negative BCE targets
 
