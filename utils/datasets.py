@@ -388,7 +388,9 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         # Check cache
         self.label_files = img2label_paths(self.img_files)  # labels
         cache_path = (p if p.is_file() else Path(self.label_files[0]).parent).with_suffix('.cache')  # cached labels
-        if cache_path.is_file():
+        # if cache_path.is_file():
+        print("Ignoring Cache for now!!")
+        if False:
             cache, exists = torch.load(cache_path), True  # load
             #if cache['hash'] != get_hash(self.label_files + self.img_files) or 'version' not in cache:  # changed
             #    cache, exists = self.cache_labels(cache_path, prefix), False  # re-cache
@@ -487,10 +489,14 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                     nf += 1  # label found
                     with open(lb_file, 'r') as f:
                         l = [x.split() for x in f.read().strip().splitlines()]
-                        if len(l)>0:
-                            l = [x + [str(31.4)] for x in l]
-                            print(l)
-                        print("WARNING DUMMY DISTANCES ONLY")
+                        # l[-1] = l[-1]/2000
+                        # if len(l)>0:
+                            #scaling distances to in between 0 and 1 where 2km is 1.
+                            # l = [x[:-1] + [str(min(1,float(x[-1])/2000.0))] for x in l]
+                            # l = [x[:-1] + [x[-1]] for x in l]
+                        #     l = [x + [str(31.4)] for x in l]
+                        #     print(l)
+                        # print("WARNING DUMMY DISTANCES ONLY")
 
                         # l.append(0)
                         if any([len(x) > 8 for x in l]):  # is segment
@@ -506,10 +512,11 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                         assert np.unique(l, axis=0).shape[0] == l.shape[0], 'duplicate labels'
                     else:
                         ne += 1  # label empty
-                        l = np.zeros((0, 5), dtype=np.float32)
+                        l = np.zeros((0, 6), dtype=np.float32)
                 else:
                     nm += 1  # label missing
-                    l = np.zeros((0, 5), dtype=np.float32)
+                    # l = np.zeros((0, 5), dtype=np.float32)
+                    l = np.zeros((0, 6), dtype=np.float32)
                 x[im_file] = [l, shape, segments]
             except Exception as e:
                 nc += 1
@@ -571,13 +578,17 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             shapes = (h0, w0), ((h / h0, w / w0), pad)  # for COCO mAP rescaling
 
             labels = self.labels[index].copy()
+
             if labels.size:  # normalized xywh to pixel xyxy format
                 labels[:, 1:-1] = xywhn2xyxy(labels[:, 1:-1], ratio[0] * w, ratio[1] * h, padw=pad[0], padh=pad[1])
 
+
         if self.augment:
+            # print("Warning commented out random perspective augmentation")
             # Augment imagespace
             if not mosaic:
-                img, labels = random_perspective(img, labels[:,:-1],
+                # img, labels = random_perspective(img, labels[:,:-1],
+                img, labels = random_perspective(img, labels,
                                                  degrees=hyp['degrees'],
                                                  translate=hyp['translate'],
                                                  scale=hyp['scale'],
@@ -611,9 +622,10 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             labels[:, 1:5] = xyxy2xywh(labels[:, 1:5])  # convert xyxy to xywh
             labels[:, [2, 4]] /= img.shape[0]  # normalized height 0-1
             labels[:, [1, 3]] /= img.shape[1]  # normalized width 0-1
-            labels[:, -1] = np.clip(labels[:, -1], 0, 1000) # clamp distances to 1000 at most
-            labels[:, -1] = np.log(labels[:, -1] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
-
+            labels[:, -1] = np.clip(labels[:, -1], 0, 2000) # clamp distances to 2000 at most
+            # labels[:, -1] = np.log(labels[:, -1] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
+            labels[:, -1] = labels[:, -1]/2000  # push distances to log-scale, log(1) = 0 for distance=0
+            # print("warning LOG level distances...")
         if self.augment:
             # flip up-down
             if random.random() < hyp['flipud']:
@@ -631,6 +643,8 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         # print("labels shape ", labels.shape)
         if nL:
             labels_out[:, 1:] = torch.from_numpy(labels)
+        # else:
+        #     print("jo")
 
         # Convert
         img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
@@ -679,6 +693,7 @@ def load_image(self, index):
     if img is None:  # not cached
         path = self.img_files[index]
         img = cv2.imread(path)  # BGR
+        # print(path)
         assert img is not None, 'Image Not Found ' + path
         h0, w0 = img.shape[:2]  # orig hw
         r = self.img_size / max(h0, w0)  # resize image to img_size

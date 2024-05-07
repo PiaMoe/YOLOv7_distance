@@ -626,7 +626,7 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
     merge = False  # use merge-NMS
 
     t = time.time()
-    output = [torch.zeros((0, 7), device=prediction.device)] * prediction.shape[0]
+    output = [torch.zeros((0, 8), device=prediction.device)] * prediction.shape[0]
     for xi, x in enumerate(prediction):  # image index, image inference
         # Apply constraints
         # x[((x[..., 2:4] < min_wh) | (x[..., 2:4] > max_wh)).any(1), 4] = 0  # width-height
@@ -661,7 +661,7 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
             x = torch.cat((box[i], x[i, j + 5, None], j[:, None].float(), x[i, -1, None]), 1)
         else:  # best class only
             conf, j = x[:, 5:-1].max(1, keepdim=True)
-            x = torch.cat((box, conf, j.float()), 1)[conf.view(-1) > conf_thres]
+            x = torch.cat((box, conf, j.float(), x[:,-1].unsqueeze(1)), 1)[conf.view(-1) > conf_thres]
 
         # Filter by class
         if classes is not None:
