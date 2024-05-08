@@ -126,7 +126,8 @@ def detect(save_img=False):
 
                     if save_img or view_img:  # Add bbox to image
                         print("prediction rescaling to actual number distances")
-                        label = f'{names[int(cls)]} {conf:.2f} {max(0,min(distance*2000,2000)):.2f}'
+                        # label = f'{names[int(cls)]} {conf:.2f} {max(0,min(distance*1000,1000)):.2f}'
+                        label = f'{names[int(cls)]} {conf:.2f} {max(0,min(distance,1000)):.2f}'
                         plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
 
             # Print time (inference + NMS)
@@ -169,7 +170,7 @@ if __name__ == '__main__':
     parser.add_argument('--weights', nargs='+', type=str, default='yolov7.pt', help='model.pt path(s)')
     parser.add_argument('--source', type=str, default='inference/images', help='source')  # file/folder, 0 for webcam
     parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
-    parser.add_argument('--conf-thres', type=float, default=0.03, help='object confidence threshold')
+    parser.add_argument('--conf-thres', type=float, default=0.2, help='object confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='IOU threshold for NMS')
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--view-img', action='store_true', help='display results')

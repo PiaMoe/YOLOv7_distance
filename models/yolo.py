@@ -58,7 +58,8 @@ class Detect(nn.Module):
                 if not torch.onnx.is_in_onnx_export():
                     y[..., 0:2] = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy
                     y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
-                    # y[..., -1] = torch.exp(y[..., -1])-1 #distances exponent
+                    y[..., -1] = (y[..., -1]+0.5) * np.log(1000) #distances exponent
+                    y[..., -1] = torch.exp(y[..., -1])-1 #distances exponent
                 else:
                     xy, wh, conf = y.split((2, 2, self.nc + 1), 4)  # y.tensor_split((2, 4, 5), 4)  # torch 1.8.0
                     xy = xy * (2. * self.stride[i]) + (self.stride[i] * (self.grid[i] - 0.5))  # new xy

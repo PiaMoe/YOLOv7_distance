@@ -622,9 +622,9 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             labels[:, 1:5] = xyxy2xywh(labels[:, 1:5])  # convert xyxy to xywh
             labels[:, [2, 4]] /= img.shape[0]  # normalized height 0-1
             labels[:, [1, 3]] /= img.shape[1]  # normalized width 0-1
-            labels[:, -1] = np.clip(labels[:, -1], 0, 2000) # clamp distances to 2000 at most
-            # labels[:, -1] = np.log(labels[:, -1] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
-            labels[:, -1] = labels[:, -1]/2000  # push distances to log-scale, log(1) = 0 for distance=0
+            labels[:, -1] = np.clip(labels[:, -1], 0, 1000) # clamp distances to 1000 at most
+            labels[:, -1] = np.log(labels[:, -1] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
+            labels[:, -1] = labels[:, -1]/np.log(1000)-0.5  # push distances to log-scale, log(1) = 0 for distance=0
             # print("warning LOG level distances...")
         if self.augment:
             # flip up-down
