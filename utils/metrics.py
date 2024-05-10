@@ -15,7 +15,7 @@ def fitness(x):
     return (x[:, :4] * w).sum(1)
 
 
-def ap_per_class(tp, conf, pred_cls, target_cls, v5_metric=False, plot=False, save_dir='.', names=()):
+def ap_per_class(tp, conf, pred_cls, target_cls, pred_dist, target_dist, v5_metric=False, plot=False, save_dir='.', names=()):
     """ Compute the average precision, given the recall and precision curves.
     Source: https://github.com/rafaelpadilla/Object-Detection-Metrics.
     # Arguments
@@ -23,6 +23,8 @@ def ap_per_class(tp, conf, pred_cls, target_cls, v5_metric=False, plot=False, sa
         conf:  Objectness value from 0-1 (nparray).
         pred_cls:  Predicted object classes (nparray).
         target_cls:  True object classes (nparray).
+        pred_dist:  Predicted object classes (nparray).
+        target_dist:  True object classes (nparray).
         plot:  Plot precision-recall curve at mAP@0.5
         save_dir:  Plot save directory
     # Returns
@@ -31,7 +33,7 @@ def ap_per_class(tp, conf, pred_cls, target_cls, v5_metric=False, plot=False, sa
 
     # Sort by objectness
     i = np.argsort(-conf)
-    tp, conf, pred_cls = tp[i], conf[i], pred_cls[i]
+    tp, conf, pred_cls, pred_dist = tp[i], conf[i], pred_cls[i], pred_dist[i]
 
     # Find unique classes
     unique_classes = np.unique(target_cls)
@@ -40,14 +42,22 @@ def ap_per_class(tp, conf, pred_cls, target_cls, v5_metric=False, plot=False, sa
     # Create Precision-Recall curve and compute AP for each class
     px, py = np.linspace(0, 1, 1000), []  # for plotting
     ap, p, r = np.zeros((nc, tp.shape[1])), np.zeros((nc, 1000)), np.zeros((nc, 1000))
+    # distance_errors = []
     for ci, c in enumerate(unique_classes):
         i = pred_cls == c
         n_l = (target_cls == c).sum()  # number of labels
         n_p = i.sum()  # number of predictions
 
         if n_p == 0 or n_l == 0:
+            # distance_errors.append(np.nan)
             continue
         else:
+            # Compute distance errors for each prediction for class c
+            # class_pred_dists = pred_dist[i]
+            # class_target_dists = target_dist[target_cls == c]
+            # errors = np.abs(class_pred_dists - class_target_dists)
+            # distance_errors.append(errors.mean())  # Store the mean error for class c
+
             # Accumulate FPs and TPs
             fpc = (1 - tp[i]).cumsum(0)
             tpc = tp[i].cumsum(0)
@@ -123,15 +133,16 @@ class ConfusionMatrix:
         Return intersection-over-union (Jaccard index) of boxes.
         Both sets of boxes are expected to be in (x1, y1, x2, y2) format.
         Arguments:
-            detections (Array[N, 6]), x1, y1, x2, y2, conf, class, distance
-            labels (Array[M, 5]), class, x1, y1, x2, y2, distance
+            detections (Array[N, 6]), x1, y1, x2, y2, conf, class, no distance!
+            labels (Array[M, 5]), class, x1, y1, x2, y2, no distance!
         Returns:
             None, updates confusion matrix accordingly
         """
         detections = detections[detections[:, 4] > self.conf]
         gt_classes = labels[:, 0].int()
         detection_classes = detections[:, 5].int()
-        iou = general.box_iou(labels[:, 1:-1], detections[:, :4])
+        # iou = general.box_iou(labels[:, 1:-1], detections[:, :4]) for distances. but sth still incorrect
+        iou = general.box_iou(labels[:, 1:], detections[:, :4])
 
         x = torch.where(iou > self.iou_thres)
         if x[0].shape[0]:

@@ -361,7 +361,8 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.mosaic = self.augment and not self.rect  # load 4 images at a time into a mosaic (only during training)
         self.mosaic_border = [-img_size // 2, -img_size // 2]
         self.stride = stride
-        self.path = path        
+        self.path = path
+        self.prefix = prefix
         #self.albumentations = Albumentations() if augment else None
 
         try:
@@ -622,9 +623,10 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             labels[:, 1:5] = xyxy2xywh(labels[:, 1:5])  # convert xyxy to xywh
             labels[:, [2, 4]] /= img.shape[0]  # normalized height 0-1
             labels[:, [1, 3]] /= img.shape[1]  # normalized width 0-1
-            labels[:, -1] = np.clip(labels[:, -1], 0, 1000) # clamp distances to 1000 at most
-            labels[:, -1] = np.log(labels[:, -1] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
-            labels[:, -1] = labels[:, -1]/np.log(1000)-0.5  # push distances to log-scale, log(1) = 0 for distance=0
+            if not self.prefix in ['val','test']:
+                labels[:, -1] = np.clip(labels[:, -1], 0, 1000) # clamp distances to 1000 at most
+                labels[:, -1] = np.log(labels[:, -1] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
+                labels[:, -1] = labels[:, -1]/np.log(1000)-0.5  # push distances to log-scale, log(1) = 0 for distance=0
             # print("warning LOG level distances...")
         if self.augment:
             # flip up-down
