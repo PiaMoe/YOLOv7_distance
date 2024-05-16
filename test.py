@@ -243,7 +243,7 @@ def test(data,
     else:
         nt = torch.zeros(1)
 
-    print(distance_errors)
+    # print(distance_errors)
     mean_dist_err_other = 0
     mean_dist_err_boat = 0
     number_other=0
@@ -266,6 +266,11 @@ def test(data,
     mean_dist_err_other/=number_other
     print("mean_dist_err_boat ", mean_dist_err_boat)
     print("mean_dist_err_other ", mean_dist_err_other)
+    distance_results = {}
+    distance_results["mean_dist_err_boat"] = mean_dist_err_boat
+    distance_results["mean_dist_err_other"] = mean_dist_err_other
+    wandb_logger.log({"Distance results": distance_results})
+
 
     # Print results
     pf = '%20s' + '%12i' * 2 + '%12.3g' * 4  # print format
