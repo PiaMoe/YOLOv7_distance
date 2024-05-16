@@ -127,7 +127,7 @@ def detect(save_img=False):
                     if save_img or view_img:  # Add bbox to image
                         print("prediction rescaling to actual number distances")
                         # label = f'{names[int(cls)]} {conf:.2f} {max(0,min(distance*1000,1000)):.2f}'
-                        label = f'{names[int(cls)]} {conf:.2f} {max(0,min(distance,1000)):.2f}'
+                        label = f'{names[int(cls)]} {conf:.2f} {max(0,min(distance,1000)):.1f}'
                         plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
 
             # Print time (inference + NMS)

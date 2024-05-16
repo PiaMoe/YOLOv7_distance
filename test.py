@@ -117,7 +117,7 @@ def test(data,
 
             # Compute loss
             if compute_loss:
-                loss += compute_loss([x.float() for x in train_out], targets)[1][:3]  # box, obj, cls TODO not working for distances
+                loss += compute_loss([x.float() for x in train_out], targets)[1][:4]  # box, obj, cls, dist
 
             # Run NMS
             targets[:, 2:-1] *= torch.Tensor([width, height, width, height]).to(device)  # to pixels
@@ -262,14 +262,15 @@ def test(data,
                 if dconf>0.3:
                     mean_dist_err_other+=derror
                     number_other += 1
-    mean_dist_err_boat/=number_boats
-    mean_dist_err_other/=number_other
+    mean_dist_err_boat = mean_dist_err_boat/number_boats if number_boats>0 else -1
+    mean_dist_err_other=  mean_dist_err_other/number_other if number_other>0 else -1
     print("mean_dist_err_boat ", mean_dist_err_boat)
     print("mean_dist_err_other ", mean_dist_err_other)
-    distance_results = {}
-    distance_results["mean_dist_err_boat"] = mean_dist_err_boat
-    distance_results["mean_dist_err_other"] = mean_dist_err_other
-    wandb_logger.log({"Distance results": distance_results})
+    # distance_results = {}
+    # distance_results["mean_dist_err_boat"] = mean_dist_err_boat
+    # distance_results["mean_dist_err_other"] = mean_dist_err_other
+    wandb_logger.log({"metrics/mean_dist_err_boat": mean_dist_err_boat})
+    wandb_logger.log({"metrics/mean_dist_err_other": mean_dist_err_other})
 
 
     # Print results

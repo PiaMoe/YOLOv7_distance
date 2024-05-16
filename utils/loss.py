@@ -430,6 +430,7 @@ class ComputeLoss:
         BCEcls = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([h['cls_pw']], device=device))
         BCEobj = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([h['obj_pw']], device=device))
         self.MSEdist = nn.MSELoss()
+        self.L1dist = nn.L1Loss()
 
         # Class label smoothing https://arxiv.org/pdf/1902.04103.pdf eqn 3
         self.cp, self.cn = smooth_BCE(eps=h.get('label_smoothing', 0.0))  # positive, negative BCE targets
@@ -481,7 +482,8 @@ class ComputeLoss:
                 # matched_distance_targets = distance_targets[b]  # This is likely incorrect; you need a correct method here
 
                 # Calculate MSE loss for distances
-                ldist += self.MSEdist(pdist, distance)
+                # ldist += self.MSEdist(pdist, distance)
+                ldist += self.L1dist(pdist, distance)
 
                 # Classification
                 if self.nc > 1:  # cls loss (only if multiple classes)

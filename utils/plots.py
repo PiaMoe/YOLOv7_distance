@@ -168,6 +168,14 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
             for j, box in enumerate(boxes.T):
                 cls = int(classes[j])
                 dist = distances[j]
+                #TODO change in dataset.py as well if you change here and vice versa
+                if labels:
+                    dist = (dist + 0.5) * np.log(1000)
+                    dist = np.exp(dist)-1
+                    # dist = np.clip(dist, 0)
+                    # labels[:, -1] = np.clip(labels[:, -1], 0, 1000)  # clamp distances to 1000 at most
+                    # labels[:, -1] = np.log(labels[:, -1] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
+
                 color = colors[cls % len(colors)]
                 cls = names[cls] if names else cls
                 if labels or conf[j] > 0.25:  # 0.25 conf thresh
