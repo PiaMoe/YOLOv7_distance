@@ -265,13 +265,14 @@ class WandbLogger():
             class_set = wandb.Classes([{'id': id, 'name': name} for id, name in names.items()])
             box_data = []
             total_conf = 0
-            for *xyxy, conf, cls in predn.tolist():
+            for *xyxy, conf, cls, dist in predn.tolist():
                 if conf >= 0.25:
                     box_data.append(
                         {"position": {"minX": xyxy[0], "minY": xyxy[1], "maxX": xyxy[2], "maxY": xyxy[3]},
                          "class_id": int(cls),
-                         "box_caption": "%s %.3f" % (names[cls], conf),
-                         "scores": {"class_score": conf},
+                         "box_caption": "%s %.1f %.1f" % (names[cls], conf, dist),
+                         "scores": {"class_score": round(conf, 1)},
+                         # "distance": dist,
                          "domain": "pixel"})
                     total_conf = total_conf + conf
             boxes = {"predictions": {"box_data": box_data, "class_labels": names}}  # inference-space
