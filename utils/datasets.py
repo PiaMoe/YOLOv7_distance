@@ -63,7 +63,7 @@ def exif_size(img):
 
 
 def create_dataloader(path, imgsz, batch_size, stride, opt, hyp=None, augment=False, cache=False, pad=0.0, rect=False,
-                      rank=-1, world_size=1, workers=8, image_weights=False, quad=False, prefix=''):
+                      rank=-1, world_size=1, workers=8, image_weights=False, quad=False, prefix='', traintestval="train"):
     # Make sure only the first process in DDP process the dataset first, and the following others can use the cache
     with torch_distributed_zero_first(rank):
         dataset = LoadImagesAndLabels(path, imgsz, batch_size,
@@ -75,7 +75,8 @@ def create_dataloader(path, imgsz, batch_size, stride, opt, hyp=None, augment=Fa
                                       stride=int(stride),
                                       pad=pad,
                                       image_weights=image_weights,
-                                      prefix=prefix)
+                                      prefix=prefix,
+                                      traintestval=traintestval)
 
     batch_size = min(batch_size, len(dataset))
     nw = min([os.cpu_count() // world_size, batch_size if batch_size > 1 else 0, workers])  # number of workers
@@ -352,7 +353,7 @@ def img2label_paths(img_paths):
 
 class LoadImagesAndLabels(Dataset):  # for training/testing
     def __init__(self, path, img_size=640, batch_size=16, augment=False, hyp=None, rect=False, image_weights=False,
-                 cache_images=False, single_cls=False, stride=32, pad=0.0, prefix=''):
+                 cache_images=False, single_cls=False, stride=32, pad=0.0, prefix='', traintestval="train"):
         self.img_size = img_size
         self.augment = augment
         self.hyp = hyp
@@ -363,6 +364,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.stride = stride
         self.path = path
         self.prefix = prefix
+        self.traintestval = traintestval
         #self.albumentations = Albumentations() if augment else None
 
         try:
@@ -623,11 +625,22 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             labels[:, 1:5] = xyxy2xywh(labels[:, 1:5])  # convert xyxy to xywh
             labels[:, [2, 4]] /= img.shape[0]  # normalized height 0-1
             labels[:, [1, 3]] /= img.shape[1]  # normalized width 0-1
-            if not self.prefix in ['val','test']:
-                labels[:, -1] = np.clip(labels[:, -1], 0, 1000) # clamp distances to 1000 at most
-                labels[:, -1] = np.log(labels[:, -1] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
-                labels[:, -1] = labels[:, -1]/np.log(1000)-0.5  # push distances to log-scale, log(1) = 0 for distance=0
-            # print("warning LOG level distances...")
+            # if not self.prefix in ['val','test']:
+            if self.traintestval == 'train':
+                max_distance = hyp["max_distance"]
+                labels[:, -1] = np.clip(labels[:, -1], 0, max_distance)  # clamp distances to max_distance at most
+                if hyp["normalization_strategy"] == 'log':
+                    labels[:, -1] = np.log(labels[:, -1] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
+                    labels[:, -1] = labels[:, -1] / np.log(max_distance)
+                elif hyp["normalization_strategy"] == 'log_negative':
+                    labels[:, -1] = np.log(labels[:, -1] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
+                    labels[:, -1] = labels[:, -1] / np.log(max_distance) - 0.5
+                elif hyp["normalization_strategy"] == 'linear':
+                    labels[:, -1] = labels[:, -1] / max_distance
+                elif hyp["normalization_strategy"] == 'linear_negative':
+                    labels[:, -1] = labels[:, -1] / max_distance - 0.5
+                else:
+                    raise ValueError("no normalization strategy defined")
         if self.augment:
             # flip up-down
             if random.random() < hyp['flipud']:

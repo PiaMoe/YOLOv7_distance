@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import yaml
 from tqdm import tqdm
-
+from collections import defaultdict
 from models.experimental import attempt_load
 from utils.datasets import create_dataloader
 from utils.general import coco80_to_coco91_class, check_dataset, check_file, check_img_size, check_requirements, \
@@ -17,6 +17,15 @@ from utils.metrics import ap_per_class, ConfusionMatrix
 from utils.plots import plot_images, output_to_target, plot_study_txt
 from utils.torch_utils import select_device, time_synchronized, TracedModel
 
+
+def create_distance_bins(max_distance, number_bins):
+    # Calculate the width of each bin
+    bin_width = max_distance / number_bins
+
+    # Create the bins
+    distance_bins = [(i * bin_width, (i + 1) * bin_width) for i in range(number_bins)]
+
+    return distance_bins
 
 def test(data,
          weights=None,
@@ -40,7 +49,8 @@ def test(data,
          half_precision=True,
          trace=False,
          is_coco=False,
-         v5_metric=False):
+         v5_metric=False,
+         hyp=None):
     # Initialize/load model and set device
     training = model is not None
     if training:  # called by train.py
@@ -100,8 +110,9 @@ def test(data,
     coco91class = coco80_to_coco91_class()
     s = ('%20s' + '%12s' * 6) % ('Class', 'Images', 'Labels', 'P', 'R', 'mAP@.5', 'mAP@.5:.95')
     p, r, f1, mp, mr, map50, map, t0, t1 = 0., 0., 0., 0., 0., 0., 0., 0., 0.
-    loss = torch.zeros(3, device=device)
+    loss = torch.zeros(4, device=device)
     jdict, stats, ap, ap_class, wandb_images = [], [], [], [], []
+    distance_errors = []
     for batch_i, (img, targets, paths, shapes) in enumerate(tqdm(dataloader, desc=s)):
         img = img.to(device, non_blocking=True)
         img = img.half() if half else img.float()  # uint8 to fp16/32
@@ -127,7 +138,7 @@ def test(data,
             t1 += time_synchronized() - t
 
         # Statistics per image
-        distance_errors = []
+
         for si, pred in enumerate(out):
             labels = targets[targets[:, 0] == si, 1:]
             nl = len(labels)
@@ -218,8 +229,8 @@ def test(data,
                                 pred_conf = pred[pi[j], 4]
                                 distance_error = abs(pred_dist - target_dist)
                                 # distance_errors.append(distance_error.item())
-                                distance_conf_and_error = [float(pred_conf), float(distance_error)]
-                                distance_errors_per_cat[int(cls)].append(distance_conf_and_error)
+                                distance_conf_and_error_and_gt = [float(pred_conf), float(distance_error), float(target_dist), float(pred_dist)]
+                                distance_errors_per_cat[int(cls)].append(distance_conf_and_error_and_gt)
                                 if len(detected) == nl:  # all targets already located in image
                                     break
                 distance_errors.append(distance_errors_per_cat)
@@ -235,42 +246,105 @@ def test(data,
 
     # Compute statistics
     stats = [np.concatenate(x, 0) for x in zip(*stats)]  # to numpy
+
+    distance_bins = create_distance_bins(hyp["max_distance"], 5)
+    print(distance_bins)
+    # distance_bins = [(0, 50), (50, 100), (100, 150), (200, 250), (250, 300), (300, 500), (500, 700), (700, 1000)]
     if len(stats) and stats[0].any():
         p, r, ap, f1, ap_class = ap_per_class(*stats, plot=plots, v5_metric=v5_metric, save_dir=save_dir, names=names)
         ap50, ap = ap[:, 0], ap.mean(1)  # AP@0.5, AP@0.5:0.95
         mp, mr, map50, map = p.mean(), r.mean(), ap50.mean(), ap.mean()
         nt = np.bincount(stats[3].astype(np.int64), minlength=nc)  # number of targets per class
+
+        #do it for individual distances as well:
+        # stats_for_bins = {}
+        # for bin_min, bin_max in distance_bins:
+        #     #stats[-1] should be target distances
+        #     boolean_array = (stats[-1] >= bin_min) & (stats[-1] < bin_max)
+        #     bin_key = (bin_min, bin_max)
+        #     for k, nparray in enumerate(stats):
+        #         print(k, nparray)
+        #         p_d, r_d, ap_d, f1_d, ap_class_d = ap_per_class(nparray[boolean_array])
+        #     stats_for_bins[bin_key] = [p_d, r_d, ap_d, f1_d, ap_class_d]
+        #     print(bin_key, stats_for_bins[bin_key])
+
     else:
         nt = torch.zeros(1)
 
     # print(distance_errors)
-    mean_dist_err_other = 0
-    mean_dist_err_boat = 0
-    number_other=0
-    number_boats=0
+
+
+
+    # Initialize dictionaries to store accumulated weighted errors and total confidences
+    mean_dist_err_boat_bins = defaultdict(float)
+    mean_dist_err_other_bins = defaultdict(float)
+    total_conf_boats_bins = defaultdict(float)
+    total_conf_other_bins = defaultdict(float)
+
+    # Initialize variables to store total accumulated weighted errors and confidences
+    total_mean_dist_err_boat = 0
+    total_mean_dist_err_other = 0
+    total_conf_boats = 0
+    total_conf_other = 0
+    print(distance_errors)
     for distance_err in distance_errors:
         if 0 in distance_err.keys():
             for obj_disst_pair in distance_err[0]:
-            # if len(distance_err[0])>0:
-                dconf, derror = obj_disst_pair
-                if dconf>0.3:
-                    mean_dist_err_boat+=derror
-                    number_boats+=1
+                dconf, derror, gt, pred = obj_disst_pair
+                total_mean_dist_err_boat += dconf * derror
+                total_conf_boats += dconf
+                for bin_min, bin_max in distance_bins:
+                    if bin_min <= gt < bin_max:
+                        bin_key = (bin_min, bin_max)
+                        mean_dist_err_boat_bins[bin_key] += dconf * derror
+                        total_conf_boats_bins[bin_key] += dconf
+                        break
         if 1 in distance_err.keys():
             for obj_disst_pair in distance_err[1]:
-                dconf, derror = obj_disst_pair
-                if dconf>0.3:
-                    mean_dist_err_other+=derror
-                    number_other += 1
-    mean_dist_err_boat = mean_dist_err_boat/number_boats if number_boats>0 else -1
-    mean_dist_err_other=  mean_dist_err_other/number_other if number_other>0 else -1
-    print("mean_dist_err_boat ", mean_dist_err_boat)
-    print("mean_dist_err_other ", mean_dist_err_other)
-    # distance_results = {}
-    # distance_results["mean_dist_err_boat"] = mean_dist_err_boat
-    # distance_results["mean_dist_err_other"] = mean_dist_err_other
-    wandb_logger.log({"metrics/mean_dist_err_boat": mean_dist_err_boat})
-    wandb_logger.log({"metrics/mean_dist_err_other": mean_dist_err_other})
+                dconf, derror, gt, pred = obj_disst_pair
+                total_mean_dist_err_other += dconf * derror
+                total_conf_other += dconf
+                for bin_min, bin_max in distance_bins:
+                    if bin_min <= gt < bin_max:
+                        bin_key = (bin_min, bin_max)
+                        mean_dist_err_other_bins[bin_key] += dconf * derror
+                        total_conf_other_bins[bin_key] += dconf
+                        break
+
+    # Calculate the weighted mean distance error for each bin
+    weighted_mean_dist_err_boat_bins = {
+        bin_key: mean_dist_err_boat_bins[bin_key] / total_conf_boats_bins[bin_key]
+        if total_conf_boats_bins[bin_key] > 0 else -1
+        for bin_key in distance_bins
+    }
+
+    weighted_mean_dist_err_other_bins = {
+        bin_key: mean_dist_err_other_bins[bin_key] / total_conf_other_bins[bin_key]
+        if total_conf_other_bins[bin_key] > 0 else -1
+        for bin_key in distance_bins
+    }
+
+    # Calculate the overall weighted mean distance error
+    overall_weighted_mean_dist_err_boat = total_mean_dist_err_boat / total_conf_boats if total_conf_boats > 0 else -1
+    overall_weighted_mean_dist_err_other = total_mean_dist_err_other / total_conf_other if total_conf_other > 0 else -1
+    metrics_bin_distances = {}
+    # Print the results for each bin
+    for bin_key in distance_bins:
+        print(f"Distance bin {bin_key}:")
+        print("  mean_dist_err_boat =", weighted_mean_dist_err_boat_bins[bin_key])
+        print("  mean_dist_err_other =", weighted_mean_dist_err_other_bins[bin_key])
+        metrics_bin_distances["metrics/distancebins/mean_dist_err_boat_"+str(bin_key)] = weighted_mean_dist_err_boat_bins[bin_key]
+        metrics_bin_distances["metrics/distancebins/mean_dist_err_other_"+str(bin_key)] = weighted_mean_dist_err_other_bins[bin_key]
+    wandb_logger.log(metrics_bin_distances)
+    # Print the overall results
+    print("Overall mean_dist_err_boat =", overall_weighted_mean_dist_err_boat)
+    print("Overall mean_dist_err_other =", overall_weighted_mean_dist_err_other)
+
+
+    metrics_overall_distance = {}
+    metrics_overall_distance["metrics/mean_dist_err_boat"] = overall_weighted_mean_dist_err_boat
+    metrics_overall_distance["metrics/mean_dist_err_other"] = overall_weighted_mean_dist_err_other
+    wandb_logger.log(metrics_overall_distance)
 
 
     # Print results

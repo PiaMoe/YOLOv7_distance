@@ -14,6 +14,15 @@ from utils.general import check_img_size, check_requirements, check_imshow, non_
 from utils.plots import plot_one_box
 from utils.torch_utils import select_device, load_classifier, time_synchronized, TracedModel
 
+def get_color_based_on_distance(distance):
+    if distance <= 50:
+        return (0, 0, 255)  # Red in BGR
+    elif 50 < distance <= 150:
+        return (0, 165, 255)  # Orange in BGR
+    elif 150 < distance <= 300:
+        return (0, 255, 255)  # Yellow in BGR
+    else:
+        return (255, 0, 0)  # Blue in BGR
 
 def detect(save_img=False):
     source, weights, view_img, save_txt, imgsz, trace = opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size, not opt.no_trace
@@ -127,8 +136,11 @@ def detect(save_img=False):
                     if save_img or view_img:  # Add bbox to image
                         print("prediction rescaling to actual number distances")
                         # label = f'{names[int(cls)]} {conf:.2f} {max(0,min(distance*1000,1000)):.2f}'
-                        label = f'{names[int(cls)]} {conf:.2f} {max(0,min(distance,1000)):.1f}'
-                        plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
+                        # label = f'{names[int(cls)]} {conf:.2f} {max(0,min(distance,1000)):.1f}'
+                        label = f'{names[int(cls)]} {conf:.2f} {distance:.1f}' # i believe clipping is taken care of in inference yolo, distance
+                        color = get_color_based_on_distance(distance)
+                        # plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
+                        plot_one_box(xyxy, im0, label=label, color=color, line_thickness=1)
 
             # Print time (inference + NMS)
             print(f'{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS')

@@ -26,9 +26,11 @@ class Detect(nn.Module):
     end2end = False
     include_nms = False
     concat = False
-
-    def __init__(self, nc=80, anchors=(), ch=()):  # detection layer
+    def __init__(self, nc=80, anchors=(), ch=(), hyp=None):  # detection layer
         super(Detect, self).__init__()
+        # self.hyp = hyp
+        self.normalization_strategy = hyp["normalization_strategy"]
+        self.max_distance = hyp["max_distance"]
         self.nc = nc  # number of classes
         self.no = nc + 5 + 1 # number of outputs per anchor
         self.nl = len(anchors)  # number of detection layers
@@ -52,14 +54,28 @@ class Detect(nn.Module):
                 if self.grid[i].shape[2:4] != x[i].shape[2:4]:
                     self.grid[i] = self._make_grid(nx, ny).to(x[i].device)
                 y = x[i].clone()  # avoid modifying x directly
-                y[..., :-1] = y[..., :-1].sigmoid()
+                # y[..., :-1] = y[..., :-1].sigmoid()
+                #experimentally, set everything to sigmoid, even distances..
+                y = y.sigmoid()
 
                 # y = x[i].sigmoid()
                 if not torch.onnx.is_in_onnx_export():
                     y[..., 0:2] = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy
                     y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
-                    y[..., -1] = (y[..., -1]+0.5) * np.log(1000) #distances exponent
-                    y[..., -1] = torch.exp(y[..., -1])-1 #distances exponent
+                    if self.normalization_strategy == "log":
+                        # print("taking log strategy")
+                        y[..., -1] = (y[..., -1] ) * np.log(self.max_distance)
+                        y[..., -1] = torch.exp(y[..., -1]) - 1
+                    elif self.normalization_strategy == "log_negative":
+                        y[..., -1] = (y[..., -1] + 0.5) * np.log(self.max_distance)
+                        y[..., -1] = torch.exp(y[..., -1]) - 1
+                    elif self.normalization_strategy == "linear":
+                        y[..., -1] = (y[..., -1]) * self.max_distance
+                    elif self.normalization_strategy == "linear_negative":
+                        y[..., -1] = (y[..., -1] + 0.5) * self.max_distance
+                    else:
+                        raise ValueError("no normalization strategy defined")
+                    y[..., -1] = torch.clip(y[..., -1], 0, self.max_distance)
                 else:
                     xy, wh, conf = y.split((2, 2, self.nc + 1), 4)  # y.tensor_split((2, 4, 5), 4)  # torch 1.8.0
                     xy = xy * (2. * self.stride[i]) + (self.stride[i] * (self.grid[i] - 0.5))  # new xy
@@ -138,8 +154,9 @@ class IDetect(nn.Module):
                 y = x[i].sigmoid()
                 y[..., 0:2] = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy
                 y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
-                distance_pred = y[..., -1] # distances
-                distance_pred = torch.exp(distance_pred)-1
+                # distance_pred = y[..., -1] * np.log(1000)# distances
+                distance_pred = y[..., -1] * 1000# distances
+                # distance_pred = torch.exp(distance_pred)-1
                 y = torch.cat((y[..., :-1], distance_pred.unsqueeze(-1)), dim=-1)
                 z.append(y.view(bs, -1, self.no))
 
@@ -514,7 +531,7 @@ class IBin(nn.Module):
 
 
 class Model(nn.Module):
-    def __init__(self, cfg='yolor-csp-c.yaml', ch=3, nc=None, anchors=None):  # model, input channels, number of classes
+    def __init__(self, cfg='yolor-csp-c.yaml', ch=3, nc=None, anchors=None, hyp=None):  # model, input channels, number of classes
         super(Model, self).__init__()
         self.traced = False
         if isinstance(cfg, dict):
@@ -533,12 +550,12 @@ class Model(nn.Module):
         if anchors:
             logger.info(f'Overriding model.yaml anchors with anchors={anchors}')
             self.yaml['anchors'] = round(anchors)  # override yaml value
-        self.model, self.save = parse_model(deepcopy(self.yaml), ch=[ch])  # model, savelist
+        self.model, self.save = parse_model(deepcopy(self.yaml), ch=[ch], hyp=hyp)  # model, savelist
         self.names = [str(i) for i in range(self.yaml['nc'])]  # default names
         # print([x.shape for x in self.forward(torch.zeros(1, ch, 64, 64))])
 
         # Build strides, anchors
-        m = self.model[-1]  # Detect()
+        m = self.model[-1] # Detect()
         if isinstance(m, Detect):
             s = 256  # 2x min stride
             m.stride = torch.tensor([s / x.shape[-2] for x in self.forward(torch.zeros(1, ch, s, s))])  # forward
@@ -741,7 +758,7 @@ class Model(nn.Module):
         model_info(self, verbose, img_size)
 
 
-def parse_model(d, ch):  # model_dict, input_channels(3)
+def parse_model(d, ch, hyp=None):  # model_dict, input_channels(3)
     logger.info('\n%3s%18s%3s%10s  %-40s%-30s' % ('', 'from', 'n', 'params', 'module', 'arguments'))
     anchors, nc, gd, gw = d['anchors'], d['nc'], d['depth_multiple'], d['width_multiple']
     na = (len(anchors[0]) // 2) if isinstance(anchors, list) else anchors  # number of anchors
@@ -797,6 +814,7 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
             c2 = ch[f] // 2
         elif m in [Detect, IDetect, IAuxDetect, IBin, IKeypoint]:
             args.append([ch[x] for x in f])
+            args.append(hyp)
             if isinstance(args[1], int):  # number of anchors
                 args[1] = [list(range(args[1] * 2))] * len(f)
         elif m is ReOrg:

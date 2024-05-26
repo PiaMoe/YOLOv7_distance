@@ -168,9 +168,9 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
             for j, box in enumerate(boxes.T):
                 cls = int(classes[j])
                 dist = distances[j]
-                #TODO change in dataset.py as well if you change here and vice versa
+                #TODO change in dataset.py as well if you change here and vice versa distances
                 if labels:
-                    dist = (dist + 0.5) * np.log(1000)
+                    dist = (dist + 0.0) * np.log(1000) #changed to no negative values
                     dist = np.exp(dist)-1
                     # dist = np.clip(dist, 0)
                     # labels[:, -1] = np.clip(labels[:, -1], 0, 1000)  # clamp distances to 1000 at most

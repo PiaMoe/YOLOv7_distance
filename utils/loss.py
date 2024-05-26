@@ -477,13 +477,17 @@ class ComputeLoss:
                 tobj[b, a, gj, gi] = (1.0 - self.gr) + self.gr * iou.detach().clamp(0).type(tobj.dtype)  # iou ratio
 
                 #distances
-                pdist = ps[:, -1]  # assuming the last element is distance
+                pdist = ps[:, -1].sigmoid()  # assuming the last element is distance, TODO currently with sigmoid
                 # ldist += self.MSEdist(pdist, distance_targets[b, a, gj, gi])  # You need to ensure indices match here
                 # matched_distance_targets = distance_targets[b]  # This is likely incorrect; you need a correct method here
 
                 # Calculate MSE loss for distances
                 # ldist += self.MSEdist(pdist, distance)
                 ldist += self.L1dist(pdist, distance)
+
+                # loss_distance = torch.where((distance == 1) & (pdist > 1), torch.zeros_like(pdist), (pdist - distance))
+                # ldist += loss_distance.mean()
+
 
                 # Classification
                 if self.nc > 1:  # cls loss (only if multiple classes)
@@ -518,7 +522,7 @@ class ComputeLoss:
         ldist *= self.hyp['distance']
         # ldist *= 0.02
         bs = tobj.shape[0]  # batch size
-
+        #print("distance loss is off")
         loss = lbox + lobj + lcls + ldist
         return loss * bs, torch.cat((lbox, lobj, lcls, ldist, loss)).detach()
 

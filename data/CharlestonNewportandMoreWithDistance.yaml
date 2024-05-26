@@ -1,5 +1,5 @@
-train: C:\Users\ben93\Downloads\Boat_distances\images\train
-val: C:\Users\ben93\Downloads\Boat_distances\images\train
-test: C:\Users\ben93\Downloads\Boat_distances\images\train
+train: /home/kiefer/Downloads/CombinedDatasets18_dist/images/train
+val: /home/kiefer/Downloads/CombinedDatasets18_dist/images/train
+test: /home/kiefer/Downloads/CombinedDatasets18_dist/images/train
 nc: 2
 names: ['boat', 'other']
