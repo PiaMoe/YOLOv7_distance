@@ -100,9 +100,9 @@ The Dataset contains around 4000 images of maritime navigational aids (mostly re
 withheld to create a benchmark for all submitted models during the competition.
 
 We provide a reliable distance ground truth value by computing the haversine distance between the cameras GPS position for each frame and mapped navigational buoys.
-As you might notice when inspecting some of the images, we decided to also include samples where the distance to the object is significantly large and the object only 
+As you might notice when inspecting some of the images we decided to also include samples where the distance to the object is significantly large and the object only 
 consist of a few pixels in the video feed. This might push the boundaries of the object detector, hence decreasing the mAP metric. Since the evaluation metric of the challenge also includes
-object detection critera (e.g. mAP) you can feel free to remove samples where this might be the case from the training data.
+object detection critera (e.g. mAP) you can feel free to remove samples from the training data where this might be the case.
 
 Examples containing the most common buoy types:
 <p float="left">
@@ -117,3 +117,17 @@ Each line in the textfile represents a bounding box:
 class-id  center-X  center-Y  width  height  distance
 ```
 The Bounding Box coordinates and dimensions are normalized. The distance on the other hand is provided as a metric value in meters!
+
+## Evaluation
+The submitted models are evaluated on the test split of the training dataset. The test set is not publically available.
+
+Given that the challenge seeks to address both monocular distance estimation and object detection, two performance metrics are utilized. 
+The quality of object detection task for the submitted models is assessed using the mAP[.5:.95] metric.
+The distance error is defined as follows:
+
+$$\epsilon_{Dist} = \frac{1}{n}\sum_{i}^{n} c_i \frac{|d_i-\hat{d_i}|}{d_i}$$
+
+where $i$ is the index of the test sample, $n$ is the cardinality of the test set, $c_i$ the confidence of the prediction 
+(objectness * class probability $\rightarrow$ since we only have one class, this is equal to objectness), $d_i$ the ground 
+truth distance and $\hat{d_i} the predicted distance.
+Since predictions for distant objects naturally have higher deviations, we employ a relative measure to also penalize smaller absolute errors for close objects. 
