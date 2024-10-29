@@ -99,6 +99,14 @@ withheld to create a benchmark for all submitted models during the competition.
 
 We provide a reliable distance ground truth value by computing the haversine distance between the cameras GPS position for each frame and mapped navigational buoys.
 
+
+Examples containing the most common buoy types:
+<p float="left">
+  <img src="https://github.com/Ben93kie/YOLOv7-DL23/blob/distance_network/assets/Figure_1.png" width="100" />
+  <img src="https://github.com/Ben93kie/YOLOv7-DL23/blob/distance_network/assets/Figure_2.png" width="100" /> 
+</p>
+
+
 The dataset follows the YOLO format convention, where images and labels are located in seperate folders and each image is linked to a corresponding labels (.txt) file.
 Each line in the textfile represents a bounding box:
 ```text
