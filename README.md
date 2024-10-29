@@ -39,18 +39,16 @@ python -m torch.distributed.launch --nproc_per_node 4 --master_port 9527 YOLOv7-
 You may have to replace the --local-rank argument in the train.py script with --local_rank depending on your CUDA version.
 
 ## Testing
+> [!NOTE]
+> Links to the dataset and pre-trained weights will be provided here in the future (TODO!)
 
-You can test on your trained model, or download a 
-pre-trained model here:
-
-TODO
-
-Using the pretrained model, you can compute its accuracy:
+Using the pretrained model, you can evaluate its performance w.r.t. object detection and distance estimation:
 
 ``` shell
 python YOLOv7-DL23/test.py --data 'path/to/data.yaml' --img 1024 --batch 4 --conf 0.001 --iou 0.65 --device 0 --weights 'YOLOv7-DL23/init_weights.pt' --name yolov7_DistV1_test --task 'test' --hyp 'YOLOv7-DL23/data/hyp.scratch.p5.yaml'
 ```
-Make sure that the data.yaml file contains a train entity.
+Make sure that the data.yaml file contains a test or val entity depending on the task argument.
+
 
 Sample output for a model with pretrained weights:
 
@@ -82,10 +80,14 @@ Furthermore the default YOLOv7 statistict for Object Detection are displayed.
 
 ## Inference
 
-On video:
+Use the detect script to run inference on video:
 ``` shell
 python YOLOv7-DL23/detect.py --weights 'YOLOv7-DL23/init_weights.pt' --conf 0.25 --img-size 1024 --source '/path/to/video.avi'
 ```
+
+![](https://github.com/Ben93kie/YOLOv7-DL23/blob/distance_network/assets/detect.gif)
+
+The first number is the confidence value, the second number the metric distance estimate in meters.
 
 ## Export
 
