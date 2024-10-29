@@ -5,7 +5,7 @@ detection model including distance predictions. For each
 anchor, it additionally predicts the normalized metric distance of that
 object. During inference, the normalized distance is rescaled according to the defined maximum distance.
 Objects are only lateral marks, they can come in 
-different shapes or forms, e.g. see [Dataset](#installation-guide). 
+different shapes or forms, e.g. see [Dataset](#dataset). 
 
 The train set may contain ambiguous object appearances in that
 some marks are not visibly distinguishable from other types
@@ -100,5 +100,8 @@ withheld to create a benchmark for all submitted models during the competition.
 We provide a reliable distance ground truth value by computing the haversine distance between the cameras GPS position for each frame and mapped navigational buoys.
 
 The dataset follows the YOLO format convention, where images and labels are located in seperate folders and each image is linked to a corresponding labels (.txt) file.
-
-
+Each line in the textfile represents a bounding box:
+```text
+class-id  center-X  center-Y  width  height  distance
+```
+The Bounding Box coordinates and dimensions are normalized. The distance on the other hand is provided as a metric value in meters!
