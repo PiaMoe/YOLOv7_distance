@@ -3,8 +3,9 @@
 This forked and adjusted repo has scripts and methods for training a YOLOv7 
 detection model including distance predictions. For each
 anchor, it additionally predicts the normalized metric distance of that
-object. Objects are only lateral marks, they can come in 
-different shapes or forms, e.g. see TODO. 
+object. During inference, the normalized distance is rescaled according to the defined maximum distance.
+Objects are only lateral marks, they can come in 
+different shapes or forms, e.g. see [Dataset](#dataset). 
 
 The train set may contain ambiguous object appearances in that
 some marks are not visibly distinguishable from other types
@@ -21,10 +22,18 @@ as per the challenge webpages and put them in the correct path
 according to data/CharlestonWithDistance.yaml.
 
 ## Training
-
+Single GPU training
 ``` shell
-python train.py ---data data/CharlestonWithDistance.yaml
+python YOLOv7-DL23/train.py --workers 8 --device 0 --batch-size 4 --data 'path/to/data.yaml' --img 1024 1024 --cfg YOLOv7-DL23/cfg/training/yolov7_custom.yaml --weights 'YOLOv7-DL23/init_weights.pt' --name yolov7_dist_v1 --hyp YOLOv7-DL23/data/hyp.scratch.p5.yaml
 ```
+Replace 'path/to/data.yaml' with the path to the yaml file contained in the dataset folder from the challenge website.
+Note that a customised hyperparameter file is used where distance scaling method and max distance are defined.
+
+Multi GPU training
+``` shell
+python -m torch.distributed.launch --nproc_per_node 4 --master_port 9527 YOLOv7-DL23/train.py --workers 8 --device 0,1,2,3 --sync-bn --batch-size 16 --data 'path/to/data.yaml' --img 1024 1024 --cfg YOLOv7-DL23/cfg/training/yolov7_custom.yaml --weights 'YOLOv7-DL23/init_weights.pt' --name yolov7_dist_v1 --hyp YOLOv7-DL23/data/hyp.scratch.p5.yaml
+```
+You may have to replace the --local-rank argument in the train.py script with --local_rank depending on your CUDA version.
 
 ## Testing
 
@@ -36,33 +45,44 @@ TODO
 Using the pretrained model, you can compute its accuracy:
 
 ``` shell
-python test.py --weights "best.pt" --data data/CharlestonWithDistance.yaml
+python YOLOv7-DL23/test.py --data 'path/to/data.yaml' --img 1024 --batch 4 --conf 0.001 --iou 0.65 --device 0 --weights 'YOLOv7-DL23/init_weights.pt' --name yolov7_DistV1_test --task 'test' --hyp 'YOLOv7-DL23/data/hyp.scratch.p5.yaml'
 ```
+Make sure that the data.yaml file contains a train entity.
 
-You will get the results:
+You should get these results with the pretrained weights:
 
 ```
- Average Precision  (AP) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.51206
- Average Precision  (AP) @[ IoU=0.50      | area=   all | maxDets=100 ] = 0.69730
- Average Precision  (AP) @[ IoU=0.75      | area=   all | maxDets=100 ] = 0.55521
- Average Precision  (AP) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.35247
- Average Precision  (AP) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.55937
- Average Precision  (AP) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.66693
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=  1 ] = 0.38453
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets= 10 ] = 0.63765
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.68772
- Average Recall     (AR) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.53766
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.73549
- Average Recall     (AR) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.83868
+Distance bin (0.0, 200.0):
+  mean_dist_err_boat = 11.461130875618755
+  mean_dist_err_other = -1
+Distance bin (200.0, 400.0):
+  mean_dist_err_boat = 19.127938123078223
+  mean_dist_err_other = -1
+Distance bin (400.0, 600.0):
+  mean_dist_err_boat = 22.477531653126366
+  mean_dist_err_other = -1
+Distance bin (600.0, 800.0):
+  mean_dist_err_boat = 28.41937782634907
+  mean_dist_err_other = -1
+Distance bin (800.0, 1000.0):
+  mean_dist_err_boat = 52.7596413584453
+  mean_dist_err_other = -1
+Overall mean_dist_err_boat = 21.641303812311364
+Overall mean_dist_err_other = -1
+
+               Class      Images      Labels           P           R      mAP@.5  mAP@.5:.95
+                 all         522         785       0.936       0.926       0.944       0.499
 ```
+The Distance Error is computed for 5 distance bins. The interval size of a bin depends on the max dist hyperparameter passed to the testscript in hyp.scratch-p5.yaml.
+
+Furthermore the default YOLOv7 statistict for Object Detection are displayed.
 
 ## Inference
 
 On video:
 ``` shell
-python --weights "C:\Users\ben93\My Drive\Weights\distance\best.pt" --source "G:\Shared drives\TempRecordings\BGfirst\75.avi" --img-size 1280```
+python YOLOv7-DL23/detect.py --weights 'YOLOv7-DL23/init_weights.pt' --conf 0.25 --img-size 1024 --source '/path/to/video.avi'
 ```
-
 
 
 ## Export
@@ -73,4 +93,15 @@ server for getting displayed on the leaderboard.
 
 Instructions coming soon
 
+## Dataset
+The Dataset contains around 4000 images of maritime navigational aids (mostly red/green buoy markers). You are provided with a training and validaton set. The testset is
+withheld to create a benchmark for all submitted models during the competition.
 
+We provide a reliable distance ground truth value by computing the haversine distance between the cameras GPS position for each frame and mapped navigational buoys.
+
+The dataset follows the YOLO format convention, where images and labels are located in seperate folders and each image is linked to a corresponding labels (.txt) file.
+Each line in the textfile represents a bounding box:
+```text
+class-id  center-X  center-Y  width  height  distance
+```
+The Bounding Box coordinates and dimensions are normalized. The distance on the other hand is provided as a metric value in meters!
