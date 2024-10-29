@@ -97,7 +97,7 @@ def test(data,
         if device.type != 'cpu':
             model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
         task = opt.task if opt.task in ('train', 'val', 'test') else 'val'  # path to train/val/test images
-        dataloader = create_dataloader(data[task], imgsz, batch_size, gs, opt, pad=0.5, rect=True,
+        dataloader = create_dataloader(data[task], imgsz, batch_size, gs, opt, hyp=hyp, pad=0.5, rect=True,
                                        prefix=task)[0]
                                        # prefix=colorstr(f'{task}: '))[0]
 
@@ -248,7 +248,7 @@ def test(data,
     stats = [np.concatenate(x, 0) for x in zip(*stats)]  # to numpy
 
     distance_bins = create_distance_bins(hyp["max_distance"], 5)
-    print(distance_bins)
+    print("distance_bins ", distance_bins)
     # distance_bins = [(0, 50), (50, 100), (100, 150), (200, 250), (250, 300), (300, 500), (500, 700), (700, 1000)]
     if len(stats) and stats[0].any():
         p, r, ap, f1, ap_class = ap_per_class(*stats, plot=plots, v5_metric=v5_metric, save_dir=save_dir, names=names)
@@ -335,7 +335,7 @@ def test(data,
         print("  mean_dist_err_other =", weighted_mean_dist_err_other_bins[bin_key])
         metrics_bin_distances["metrics/distancebins/mean_dist_err_boat_"+str(bin_key)] = weighted_mean_dist_err_boat_bins[bin_key]
         metrics_bin_distances["metrics/distancebins/mean_dist_err_other_"+str(bin_key)] = weighted_mean_dist_err_other_bins[bin_key]
-    wandb_logger.log(metrics_bin_distances)
+    # wandb_logger.log(metrics_bin_distances)
     # Print the overall results
     print("Overall mean_dist_err_boat =", overall_weighted_mean_dist_err_boat)
     print("Overall mean_dist_err_other =", overall_weighted_mean_dist_err_other)
@@ -344,7 +344,7 @@ def test(data,
     metrics_overall_distance = {}
     metrics_overall_distance["metrics/mean_dist_err_boat"] = overall_weighted_mean_dist_err_boat
     metrics_overall_distance["metrics/mean_dist_err_other"] = overall_weighted_mean_dist_err_other
-    wandb_logger.log(metrics_overall_distance)
+    # wandb_logger.log(metrics_overall_distance)
 
 
     # Print results
@@ -428,11 +428,15 @@ if __name__ == '__main__':
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--no-trace', action='store_true', help='don`t trace model')
     parser.add_argument('--v5-metric', action='store_true', help='assume maximum recall as 1.0 in AP calculation')
+    parser.add_argument('--hyp', type=str, default='data/hyp.scratch.p5.yaml', help='hyperparameters path')
     opt = parser.parse_args()
     opt.save_json |= opt.data.endswith('coco.yaml')
     opt.data = check_file(opt.data)  # check file
     print(opt)
     #check_requirements()
+    opt.hyp = check_file(opt.hyp)
+    with open(opt.hyp) as f:
+        hyp = yaml.load(f, Loader=yaml.SafeLoader)  # load hyps
 
     if opt.task in ('train', 'val', 'test'):  # run normally
         test(opt.data,
@@ -445,6 +449,7 @@ if __name__ == '__main__':
              opt.single_cls,
              opt.augment,
              opt.verbose,
+             hyp=hyp,
              save_txt=opt.save_txt | opt.save_hybrid,
              save_hybrid=opt.save_hybrid,
              save_conf=opt.save_conf,
