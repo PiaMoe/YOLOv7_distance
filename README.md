@@ -26,13 +26,14 @@ Single GPU training
 ``` shell
 python YOLOv7-DL23/train.py --workers 8 --device 0 --batch-size 4 --data 'path/to/data.yaml' --img 1024 1024 --cfg YOLOv7-DL23/cfg/training/yolov7_custom.yaml --weights 'YOLOv7-DL23/init_weights.pt' --name yolov7_dist_v1 --hyp YOLOv7-DL23/data/hyp.scratch.p5.yaml
 ```
-Replace 'path/to/data.yaml' with the path to the yaml file contained in the dataset folder.
+Replace 'path/to/data.yaml' with the path to the yaml file contained in the dataset folder from the challenge website.
 Note that a customised hyperparameter file is used where distance scaling method and max distance are defined.
 
 Multi GPU training
 ``` shell
 python -m torch.distributed.launch --nproc_per_node 4 --master_port 9527 YOLOv7-DL23/train.py --workers 8 --device 0,1,2,3 --sync-bn --batch-size 16 --data 'path/to/data.yaml' --img 1024 1024 --cfg YOLOv7-DL23/cfg/training/yolov7_custom.yaml --weights 'YOLOv7-DL23/init_weights.pt' --name yolov7_dist_v1 --hyp YOLOv7-DL23/data/hyp.scratch.p5.yaml
 ```
+You may have to replace the --local-rank argument in the train.py script with --local_rank depending on your CUDA version.
 
 ## Testing
 
@@ -46,8 +47,9 @@ Using the pretrained model, you can compute its accuracy:
 ``` shell
 python YOLOv7-DL23/test.py --data 'path/to/data.yaml' --img 1024 --batch 4 --conf 0.001 --iou 0.65 --device 0 --weights 'YOLOv7-DL23/init_weights.pt' --name yolov7_DistV1_test --task 'test' --hyp 'YOLOv7-DL23/data/hyp.scratch.p5.yaml'
 ```
+Make sure that the data.yaml file contains a train entity.
 
-You will get the results:
+You should get these results with the pretrained weights:
 
 ```
 Distance bin (0.0, 200.0):
@@ -71,16 +73,16 @@ Overall mean_dist_err_other = -1
                Class      Images      Labels           P           R      mAP@.5  mAP@.5:.95
                  all         522         785       0.936       0.926       0.944       0.499
 ```
-The Distance Error is computed for 5 distance bins. The interval size of a bin depends on the max dist hyperparameter passed to the testscript in hyp.scratch-p5.yaml
+The Distance Error is computed for 5 distance bins. The interval size of a bin depends on the max dist hyperparameter passed to the testscript in hyp.scratch-p5.yaml.
+
 Furthermore the default YOLOv7 statistict for Object Detection are displayed.
 
 ## Inference
 
 On video:
 ``` shell
-python --weights "C:\Users\ben93\My Drive\Weights\distance\best.pt" --source "G:\Shared drives\TempRecordings\BGfirst\75.avi" --img-size 1280```
+python YOLOv7-DL23/detect.py --weights 'YOLOv7-DL23/init_weights.pt' --conf 0.25 --img-size 1024 --source '/path/to/video.avi'
 ```
-
 
 
 ## Export
