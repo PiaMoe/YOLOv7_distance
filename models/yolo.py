@@ -122,8 +122,17 @@ class IDetect(nn.Module):
     include_nms = False
     concat = False
 
-    def __init__(self, nc=80, anchors=(), ch=()):  # detection layer
+    def __init__(self, nc=80, anchors=(), ch=(), hyp=None):  # detection layer
         super(IDetect, self).__init__()
+        if hyp is not None:
+            self.normalization_strategy = hyp["normalization_strategy"]
+            self.max_distance = hyp["max_distance"]
+        else:
+            print("!!!Careful, no hyperparameters passed")
+            print("!!!Using default norm strat & max dist in IDetect Module")
+            self.normalization_strategy = "linear"
+            self.max_distance = 1000
+
         self.nc = nc  # number of classes
         self.no = nc + 5 + 1 # number of outputs per anchor +1 for distance
         self.nl = len(anchors)  # number of detection layers
@@ -155,9 +164,10 @@ class IDetect(nn.Module):
                 y[..., 0:2] = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy
                 y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
                 # distance_pred = y[..., -1] * np.log(1000)# distances
-                distance_pred = y[..., -1] * 1000# distances
+                ##distance_pred = y[..., -1] * self.max_distance # distances
                 # distance_pred = torch.exp(distance_pred)-1
-                y = torch.cat((y[..., :-1], distance_pred.unsqueeze(-1)), dim=-1)
+                ##y = torch.cat((y[..., :-1], distance_pred.unsqueeze(-1)), dim=-1)
+                y[..., -1] = y[..., -1] * self.max_distance
                 z.append(y.view(bs, -1, self.no))
 
         return x if self.training else (torch.cat(z, 1), x)
@@ -179,6 +189,7 @@ class IDetect(nn.Module):
                 if not torch.onnx.is_in_onnx_export():
                     y[..., 0:2] = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy
                     y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
+                    y[..., -1] = y[..., -1] * self.max_distance     # rescale distance estimate
                 else:
                     xy, wh, conf = y.split((2, 2, self.nc + 1), 4)  # y.tensor_split((2, 4, 5), 4)  # torch 1.8.0
                     xy = xy * (2. * self.stride[i]) + (self.stride[i] * (self.grid[i] - 0.5))  # new xy
@@ -762,7 +773,7 @@ def parse_model(d, ch, hyp=None):  # model_dict, input_channels(3)
     logger.info('\n%3s%18s%3s%10s  %-40s%-30s' % ('', 'from', 'n', 'params', 'module', 'arguments'))
     anchors, nc, gd, gw = d['anchors'], d['nc'], d['depth_multiple'], d['width_multiple']
     na = (len(anchors[0]) // 2) if isinstance(anchors, list) else anchors  # number of anchors
-    no = na * (nc + 5)  # number of outputs = anchors * (classes + 5)
+    no = na * (nc + 5)  # number of outputs = anchors * (classes + 5 + 1)
 
     layers, save, c2 = [], [], ch[-1]  # layers, savelist, ch out
     for i, (f, n, m, args) in enumerate(d['backbone'] + d['head']):  # from, number, module, args

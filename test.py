@@ -53,6 +53,7 @@ def test(data,
          hyp=None):
     # Initialize/load model and set device
     training = model is not None
+
     if training:  # called by train.py
         device = next(model.parameters()).device  # get model device
 
@@ -97,8 +98,9 @@ def test(data,
         if device.type != 'cpu':
             model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
         task = opt.task if opt.task in ('train', 'val', 'test') else 'val'  # path to train/val/test images
-        dataloader = create_dataloader(data[task], imgsz, batch_size, gs, opt, hyp=hyp, pad=0.5, rect=True,
-                                       prefix=task)[0]
+
+        dataloader = create_dataloader(data[task], imgsz, batch_size, gs, opt, pad=0.5, rect=True,
+                                       prefix=task, traintestval='test')[0]
                                        # prefix=colorstr(f'{task}: '))[0]
 
     if v5_metric:
@@ -228,6 +230,11 @@ def test(data,
                                 target_dist = labels[d, -1]
                                 pred_conf = pred[pi[j], 4]
                                 distance_error = abs(pred_dist - target_dist)
+                                # print()
+                                # print("Prediction tensor")
+                                # print(pred[pi[j]])
+                                # print("Prediction: ", pred_dist, "\t \t Target: ", target_dist)
+                                # print()
                                 # distance_errors.append(distance_error.item())
                                 distance_conf_and_error_and_gt = [float(pred_conf), float(distance_error), float(target_dist), float(pred_dist)]
                                 distance_errors_per_cat[int(cls)].append(distance_conf_and_error_and_gt)
@@ -247,8 +254,11 @@ def test(data,
     # Compute statistics
     stats = [np.concatenate(x, 0) for x in zip(*stats)]  # to numpy
 
-    distance_bins = create_distance_bins(hyp["max_distance"], 5)
-    print("distance_bins ", distance_bins)
+    if hyp is not None:
+        distance_bins = create_distance_bins(hyp["max_distance"], 5)
+    else:
+        distance_bins = create_distance_bins(1000, 5)   # use default dist of 1000 m if no hyperparameters passed
+    # print(distance_bins)
     # distance_bins = [(0, 50), (50, 100), (100, 150), (200, 250), (250, 300), (300, 500), (500, 700), (700, 1000)]
     if len(stats) and stats[0].any():
         p, r, ap, f1, ap_class = ap_per_class(*stats, plot=plots, v5_metric=v5_metric, save_dir=save_dir, names=names)
@@ -286,7 +296,7 @@ def test(data,
     total_mean_dist_err_other = 0
     total_conf_boats = 0
     total_conf_other = 0
-    print(distance_errors)
+    # print(distance_errors)
     for distance_err in distance_errors:
         if 0 in distance_err.keys():
             for obj_disst_pair in distance_err[0]:
@@ -335,7 +345,8 @@ def test(data,
         print("  mean_dist_err_other =", weighted_mean_dist_err_other_bins[bin_key])
         metrics_bin_distances["metrics/distancebins/mean_dist_err_boat_"+str(bin_key)] = weighted_mean_dist_err_boat_bins[bin_key]
         metrics_bin_distances["metrics/distancebins/mean_dist_err_other_"+str(bin_key)] = weighted_mean_dist_err_other_bins[bin_key]
-    # wandb_logger.log(metrics_bin_distances)
+    if not wandb_logger is None:
+        wandb_logger.log(metrics_bin_distances)
     # Print the overall results
     print("Overall mean_dist_err_boat =", overall_weighted_mean_dist_err_boat)
     print("Overall mean_dist_err_other =", overall_weighted_mean_dist_err_other)
@@ -344,7 +355,8 @@ def test(data,
     metrics_overall_distance = {}
     metrics_overall_distance["metrics/mean_dist_err_boat"] = overall_weighted_mean_dist_err_boat
     metrics_overall_distance["metrics/mean_dist_err_other"] = overall_weighted_mean_dist_err_other
-    # wandb_logger.log(metrics_overall_distance)
+    if not wandb_logger is None:
+        wandb_logger.log(metrics_overall_distance)
 
 
     # Print results
@@ -428,15 +440,26 @@ if __name__ == '__main__':
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--no-trace', action='store_true', help='don`t trace model')
     parser.add_argument('--v5-metric', action='store_true', help='assume maximum recall as 1.0 in AP calculation')
-    parser.add_argument('--hyp', type=str, default='data/hyp.scratch.p5.yaml', help='hyperparameters path')
+    parser.add_argument('--hyp', type=str, default='', help='hyperparameters path')
     opt = parser.parse_args()
     opt.save_json |= opt.data.endswith('coco.yaml')
     opt.data = check_file(opt.data)  # check file
     print(opt)
     #check_requirements()
-    opt.hyp = check_file(opt.hyp)
-    with open(opt.hyp) as f:
-        hyp = yaml.load(f, Loader=yaml.SafeLoader)  # load hyps
+
+    # load hyperparameters (for distance rescaling)
+    hyp = None
+    if opt.hyp != '':   # if hyp param file was passed
+        try:
+            with open(opt.hyp) as f:
+                hyp = yaml.load(f, Loader=yaml.SafeLoader)  # load hyps
+        except FileNotFoundError:
+            print("Path to hyperparameter file " + str(opt.hyp) + " does not exist.")
+            raise FileNotFoundError
+    else:
+        print("No Hyperparameter file passed to test script")
+        print("Using default max dist of 1000 to compute dist bins")
+        print("Use the --hyp argument to provide path to the file")
 
     if opt.task in ('train', 'val', 'test'):  # run normally
         test(opt.data,
@@ -449,12 +472,12 @@ if __name__ == '__main__':
              opt.single_cls,
              opt.augment,
              opt.verbose,
-             hyp=hyp,
              save_txt=opt.save_txt | opt.save_hybrid,
              save_hybrid=opt.save_hybrid,
              save_conf=opt.save_conf,
              trace=not opt.no_trace,
-             v5_metric=opt.v5_metric
+             v5_metric=opt.v5_metric,
+             hyp=hyp
              )
 
     elif opt.task == 'speed':  # speed benchmarks
