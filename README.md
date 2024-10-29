@@ -1,9 +1,11 @@
 # YOLOv7 with Distance Estimation
 
-This forked and adjusted repo has scripts and methods for training a YOLOv7 
+This forked and adjusted repo has scripts and methods for training a [YOLOv7](https://github.com/WongKinYiu/yolov7) 
 detection model including distance predictions. For each
 anchor, it additionally predicts the normalized metric distance of that
-object. During inference, the normalized distance is rescaled according to the defined maximum distance.
+object and concatenates this with the default YOLOv7 Detection Vector containing
+class predictions, objectness and boundingbox dimensions.
+During inference, the normalized distance is rescaled according to the defined maximum distance.
 Objects are only lateral marks, they can come in 
 different shapes or forms, e.g. see [Dataset](#dataset). 
 
@@ -17,9 +19,10 @@ Currently, it only supports the "normal" YOLOv7 model, not
 bigger ones. If you deviate from any of the below settings,
 please make sure the network layers (the head) is correct.
 
-Download the dataset (and potentially pretrained weights)
-as per the challenge webpages and put them in the correct path
-according to data/CharlestonWithDistance.yaml.
+You can download the dataset (and potentially pretrained weights)
+as per the challenge webpages. 
+
+The following instructions guide you through training the adapted model and running inference on images and video.
 
 ## Training
 Single GPU training
@@ -49,7 +52,7 @@ python YOLOv7-DL23/test.py --data 'path/to/data.yaml' --img 1024 --batch 4 --con
 ```
 Make sure that the data.yaml file contains a train entity.
 
-You should get these results with the pretrained weights:
+Sample output for a model with pretrained weights:
 
 ```
 Distance bin (0.0, 200.0):
@@ -84,7 +87,6 @@ On video:
 python YOLOv7-DL23/detect.py --weights 'YOLOv7-DL23/init_weights.pt' --conf 0.25 --img-size 1024 --source '/path/to/video.avi'
 ```
 
-
 ## Export
 
 You need to export your model to ONNX to be evaluated on the
@@ -98,6 +100,16 @@ The Dataset contains around 4000 images of maritime navigational aids (mostly re
 withheld to create a benchmark for all submitted models during the competition.
 
 We provide a reliable distance ground truth value by computing the haversine distance between the cameras GPS position for each frame and mapped navigational buoys.
+As you might notice when inspecting some of the images, we decided to also include samples where the distance to the object is significantly large and the object only 
+consist of a few pixels in the video feed. This might push the boundaries of the object detector, hence decreasing the mAP metric. Since the evaluation metric of the challenge also includes
+object detection critera (e.g. mAP) you can feel free to remove samples where this might be the case from the training data.
+
+Examples containing the most common buoy types:
+<p float="left">
+  <img src="https://github.com/Ben93kie/YOLOv7-DL23/blob/distance_network/assets/Figure_1.png" width="400" />
+  <img src="https://github.com/Ben93kie/YOLOv7-DL23/blob/distance_network/assets/Figure_2.png" width="400" /> 
+</p>
+
 
 The dataset follows the YOLO format convention, where images and labels are located in seperate folders and each image is linked to a corresponding labels (.txt) file.
 Each line in the textfile represents a bounding box:
