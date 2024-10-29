@@ -94,8 +94,8 @@ The first number is the confidence value, the second number the metric distance 
 You need to export your model to ONNX to be evaluated on the
 server for getting displayed on the leaderboard.
 
-
-Instructions coming soon
+> [!NOTE]
+> Further information regarding model export and submission will be provided soon 
 
 ## Dataset
 The Dataset contains around 4000 images of maritime navigational aids (mostly red/green buoy markers). You are provided with a training and validaton set. The testset is
@@ -121,7 +121,7 @@ class-id  center-X  center-Y  width  height  distance
 The Bounding Box coordinates and dimensions are normalized. The distance on the other hand is provided as a metric value in meters!
 
 ## Evaluation
-The submitted models are evaluated on the test split of the training dataset. The test set is not publically available.
+The submitted models are evaluated on the test split of the dataset. The test set is not publically available.
 
 Given that the challenge seeks to address both monocular distance estimation and object detection, two performance metrics are utilized. 
 The quality of object detection task for the submitted models is assessed using the mAP[.5:.95] metric.
