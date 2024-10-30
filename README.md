@@ -98,7 +98,7 @@ server for getting displayed on the leaderboard.
 > Further information regarding model export and submission will be provided soon 
 
 ## Dataset
-The Dataset contains around 4000 images of maritime navigational aids (mostly red/green buoy markers). You are provided with a training and validaton set. The testset is
+The Dataset contains around 4000 images of maritime navigational aids (mostly red/green buoy markers). You are provided only with a training set. The testset is
 withheld to create a benchmark for all submitted models during the competition.
 
 We provide a reliable distance ground truth value by computing the haversine distance between the cameras GPS position for each frame and mapped navigational buoys.
