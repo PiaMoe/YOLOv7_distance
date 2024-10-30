@@ -20,7 +20,7 @@ bigger ones. If you deviate from any of the below settings,
 please make sure the network layers (the head) is correct.
 
 You can download the dataset (and potentially pretrained weights)
-as per the challenge webpages. 
+as per the [challenge webpages](https://macvi.org/workshop/macvi25/challenges/usv_dist). 
 
 The following instructions guide you through training the adapted model and running inference on images and video.
 
