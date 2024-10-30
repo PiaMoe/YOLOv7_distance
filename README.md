@@ -98,8 +98,8 @@ server for getting displayed on the leaderboard.
 > Further information regarding model export and submission will be provided soon 
 
 ## Dataset
-The Dataset contains around 4000 images of maritime navigational aids (mostly red/green buoy markers). You are provided only with a training set. The testset is
-withheld to create a benchmark for all submitted models during the competition.
+The ![Dataset](https://drive.google.com/drive/folders/1M-K03ELa1Lf8Ob-sVJFEFMBrpQMS0210?hl=de) contains around 3000 images of maritime navigational aids (mostly red/green buoy markers). You are only provided with a training set. 
+The testset is withheld to create a benchmark for all submitted models during the competition.
 
 We provide a reliable distance ground truth value by computing the haversine distance between the cameras GPS position for each frame and mapped navigational buoys.
 As you might notice when inspecting some of the images we decided to also include samples where the distance to the object is significantly large and the object only 
@@ -124,7 +124,7 @@ The Bounding Box coordinates and dimensions are normalized. The distance on the 
 The submitted models are evaluated on the test split of the dataset. The test set is not publically available.
 
 Given that the challenge seeks to address both monocular distance estimation and object detection, two performance metrics are utilized. 
-The quality of object detection task for the submitted models is assessed using the mAP[.5:.95] metric.
+The quality of object detection task for the submitted models is assessed using the mAP@[.5:.95] metric.
 The distance error is defined as follows:
 
 $$\epsilon_{Dist} = \frac{1}{n}\sum_{i}^{n} c_i \frac{|d_i-\hat{d_i}|}{d_i}$$
