@@ -20,7 +20,7 @@ bigger ones. If you deviate from any of the below settings,
 please make sure the network layers (the head) is correct.
 
 You can download the dataset (and potentially pretrained weights)
-as per the challenge webpages. 
+as per the [challenge webpages](https://macvi.org/workshop/macvi25/challenges/usv_dist). 
 
 The following instructions guide you through training the adapted model and running inference on images and video.
 
@@ -39,18 +39,16 @@ python -m torch.distributed.launch --nproc_per_node 4 --master_port 9527 YOLOv7-
 You may have to replace the --local-rank argument in the train.py script with --local_rank depending on your CUDA version.
 
 ## Testing
+> [!NOTE]
+> Links to the dataset and pre-trained weights will be provided here in the future (TODO!)
 
-You can test on your trained model, or download a 
-pre-trained model here:
-
-TODO
-
-Using the pretrained model, you can compute its accuracy:
+Using the pretrained model, you can evaluate its performance w.r.t. object detection and distance estimation:
 
 ``` shell
 python YOLOv7-DL23/test.py --data 'path/to/data.yaml' --img 1024 --batch 4 --conf 0.001 --iou 0.65 --device 0 --weights 'YOLOv7-DL23/init_weights.pt' --name yolov7_DistV1_test --task 'test' --hyp 'YOLOv7-DL23/data/hyp.scratch.p5.yaml'
 ```
-Make sure that the data.yaml file contains a train entity.
+Make sure that the data.yaml file contains a test or val entity depending on the task argument.
+
 
 Sample output for a model with pretrained weights:
 
@@ -82,22 +80,26 @@ Furthermore the default YOLOv7 statistict for Object Detection are displayed.
 
 ## Inference
 
-On video:
+Use the detect script to run inference on video:
 ``` shell
 python YOLOv7-DL23/detect.py --weights 'YOLOv7-DL23/init_weights.pt' --conf 0.25 --img-size 1024 --source '/path/to/video.avi'
 ```
+
+![](https://github.com/Ben93kie/YOLOv7-DL23/blob/distance_network/assets/detect.gif)
+
+The first number is the confidence value, the second number the metric distance estimate in meters.
 
 ## Export
 
 You need to export your model to ONNX to be evaluated on the
 server for getting displayed on the leaderboard.
 
-
-Instructions coming soon
+> [!NOTE]
+> Further information regarding model export and submission will be provided soon 
 
 ## Dataset
-The Dataset contains around 4000 images of maritime navigational aids (mostly red/green buoy markers). You are provided with a training and validaton set. The testset is
-withheld to create a benchmark for all submitted models during the competition.
+The [Dataset](https://drive.google.com/drive/folders/1M-K03ELa1Lf8Ob-sVJFEFMBrpQMS0210?hl=de) contains around 3000 images of maritime navigational aids (mostly red/green buoy markers). You are only provided with a training set. 
+The testset is withheld to create a benchmark for all submitted models during the competition.
 
 We provide a reliable distance ground truth value by computing the haversine distance between the cameras GPS position for each frame and mapped navigational buoys.
 As you might notice when inspecting some of the images we decided to also include samples where the distance to the object is significantly large and the object only 
@@ -119,10 +121,10 @@ class-id  center-X  center-Y  width  height  distance
 The Bounding Box coordinates and dimensions are normalized. The distance on the other hand is provided as a metric value in meters!
 
 ## Evaluation
-The submitted models are evaluated on the test split of the training dataset. The test set is not publically available.
+The submitted models are evaluated on the test split of the dataset. The test set is not publically available.
 
 Given that the challenge seeks to address both monocular distance estimation and object detection, two performance metrics are utilized. 
-The quality of object detection task for the submitted models is assessed using the mAP[.5:.95] metric.
+The quality of object detection task for the submitted models is assessed using the mAP@[.5:.95] metric.
 The distance error is defined as follows:
 
 $$\epsilon_{Dist} = \frac{1}{n}\sum_{i}^{n} c_i \frac{|d_i-\hat{d_i}|}{d_i}$$
