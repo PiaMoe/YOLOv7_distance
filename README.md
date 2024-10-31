@@ -94,6 +94,13 @@ The first number is the confidence value, the second number the metric distance 
 You need to export your model to ONNX to be evaluated on the
 server for getting displayed on the leaderboard.
 
+To export the model provided in this repo, run:
+``` shell
+python YOLOv7-DL23/export_yoloV7_withdistances.py --weights 'YOLOv7-DL23/init_weights.pt'
+```
+This will create an .onnx file and a labels.txt file. The exported model in ONNX format can be uploaded to tehe [test server](https://macvi.org/workshop/macvi25/challenges/usv_dist).
+Be aware that you might need to make adjustment to the export script depending on your model architecture.
+
 > [!NOTE]
 > Further information regarding model export and submission will be provided soon 
 
