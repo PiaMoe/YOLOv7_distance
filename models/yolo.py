@@ -169,20 +169,19 @@ class IDetect(nn.Module):
         return x if self.training else (torch.cat(z, 1), x)
 
     def rescale_dist(self, dist_pred_normalized):
-        if not torch.onnx.is_in_onnx_export():
-            if self.normalization_strategy == "log":
-                rescaled_dist = (dist_pred_normalized ) * np.log(self.max_distance)
-                rescaled_dist = torch.exp(rescaled_dist) - 1
-            elif self.normalization_strategy == "log_negative":
-                rescaled_dist = (dist_pred_normalized + 0.5) * np.log(self.max_distance)
-                rescaled_dist = torch.exp(y[..., -1]) - 1
-            elif self.normalization_strategy == "linear":
-                rescaled_dist = (dist_pred_normalized) * self.max_distance
-            elif self.normalization_strategy == "linear_negative":
-                rescaled_dist = (dist_pred_normalized + 0.5) * self.max_distance
-            else:
-                raise ValueError("no normalization strategy defined")
-            rescaled_dist = torch.clip(rescaled_dist, 0, self.max_distance)
+        if self.normalization_strategy == "log":
+            rescaled_dist = (dist_pred_normalized ) * np.log(self.max_distance)
+            rescaled_dist = torch.exp(rescaled_dist) - 1
+        elif self.normalization_strategy == "log_negative":
+            rescaled_dist = (dist_pred_normalized + 0.5) * np.log(self.max_distance)
+            rescaled_dist = torch.exp(y[..., -1]) - 1
+        elif self.normalization_strategy == "linear":
+            rescaled_dist = (dist_pred_normalized) * self.max_distance
+        elif self.normalization_strategy == "linear_negative":
+            rescaled_dist = (dist_pred_normalized + 0.5) * self.max_distance
+        else:
+            raise ValueError("no normalization strategy defined")
+        rescaled_dist = torch.clip(rescaled_dist, 0, self.max_distance)
 
         return rescaled_dist
 
@@ -203,12 +202,12 @@ class IDetect(nn.Module):
                 if not torch.onnx.is_in_onnx_export():
                     y[..., 0:2] = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy
                     y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
-                    y[..., -1] = y[..., -1] * self.max_distance     # rescale distance estimate
+                    y[..., -1] = self.rescale_dist(y[..., -1])  # rescale dist based on norm strategy
                 else:
                     xy, wh, conf, dist = y.split((2, 2, self.nc + 1, 1), 4)  # y.tensor_split((2, 4, 5), 4)  # torch 1.8.0
                     xy = xy * (2. * self.stride[i]) + (self.stride[i] * (self.grid[i] - 0.5))  # new xy
                     wh = wh ** 2 * (4 * self.anchor_grid[i].data)  # new wh
-                    dist = self.rescale_dist(dist)  # rescaled dist
+                    dist = self.rescale_dist(dist)  # during ONNX export we cannot use function rescale_dist
                     y = torch.cat((xy, wh, conf, dist), 4)
                 z.append(y.view(bs, -1, self.no))
 
