@@ -163,14 +163,28 @@ class IDetect(nn.Module):
                 y = x[i].sigmoid()
                 y[..., 0:2] = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy
                 y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
-                # distance_pred = y[..., -1] * np.log(1000)# distances
-                ##distance_pred = y[..., -1] * self.max_distance # distances
-                # distance_pred = torch.exp(distance_pred)-1
-                ##y = torch.cat((y[..., :-1], distance_pred.unsqueeze(-1)), dim=-1)
-                y[..., -1] = y[..., -1] * self.max_distance
+                y[..., -1] = self.rescale_dist(y[..., -1])  # rescale dist based on norm strategy
                 z.append(y.view(bs, -1, self.no))
 
         return x if self.training else (torch.cat(z, 1), x)
+
+    def rescale_dist(self, dist_pred_normalized):
+        if not torch.onnx.is_in_onnx_export():
+            if self.normalization_strategy == "log":
+                rescaled_dist = (dist_pred_normalized ) * np.log(self.max_distance)
+                rescaled_dist = torch.exp(rescaled_dist) - 1
+            elif self.normalization_strategy == "log_negative":
+                rescaled_dist = (dist_pred_normalized + 0.5) * np.log(self.max_distance)
+                rescaled_dist = torch.exp(y[..., -1]) - 1
+            elif self.normalization_strategy == "linear":
+                rescaled_dist = (dist_pred_normalized) * self.max_distance
+            elif self.normalization_strategy == "linear_negative":
+                rescaled_dist = (dist_pred_normalized + 0.5) * self.max_distance
+            else:
+                raise ValueError("no normalization strategy defined")
+            rescaled_dist = torch.clip(rescaled_dist, 0, self.max_distance)
+
+        return rescaled_dist
 
     def fuseforward(self, x):
         # x = x.copy()  # for profiling
@@ -191,10 +205,11 @@ class IDetect(nn.Module):
                     y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
                     y[..., -1] = y[..., -1] * self.max_distance     # rescale distance estimate
                 else:
-                    xy, wh, conf = y.split((2, 2, self.nc + 1), 4)  # y.tensor_split((2, 4, 5), 4)  # torch 1.8.0
+                    xy, wh, conf, dist = y.split((2, 2, self.nc + 1, 1), 4)  # y.tensor_split((2, 4, 5), 4)  # torch 1.8.0
                     xy = xy * (2. * self.stride[i]) + (self.stride[i] * (self.grid[i] - 0.5))  # new xy
                     wh = wh ** 2 * (4 * self.anchor_grid[i].data)  # new wh
-                    y = torch.cat((xy, wh, conf), 4)
+                    dist = self.rescale_dist(dist)  # rescaled dist
+                    y = torch.cat((xy, wh, conf, dist), 4)
                 z.append(y.view(bs, -1, self.no))
 
         if self.training:
@@ -212,7 +227,6 @@ class IDetect(nn.Module):
         return out
 
     def fuse(self):
-        print("IDetect.fuse")
         # fuse ImplicitA and Convolution
         for i in range(len(self.m)):
             c1,c2,_,_ = self.m[i].weight.shape
