@@ -40,7 +40,7 @@ You may have to replace the --local-rank argument in the train.py script with --
 
 ## Testing
 > [!NOTE]
-> Links to the dataset and pre-trained weights will be provided here in the future (TODO!)
+> We will provide pretrained weights for this model on the training dataset in the near future
 
 Using the pretrained model, you can evaluate its performance w.r.t. object detection and distance estimation:
 
@@ -96,10 +96,10 @@ server for getting displayed on the leaderboard.
 
 To export the model provided in this repo, run:
 ``` shell
-python YOLOv7-DL23/export_yoloV7_withdistances.py --weights 'YOLOv7-DL23/init_weights.pt'
+python YOLOv7-DL23/export_yoloV7_withdistances.py --weights 'YOLOv7-DL23/init_weights.pt' --size 1024 1024
 ```
-This will create an .onnx file and a labels.txt file. The exported model in ONNX format can be uploaded to tehe [test server](https://macvi.org/workshop/macvi25/challenges/usv_dist).
-Be aware that you might need to make adjustment to the export script depending on your model architecture.
+This will create an .onnx file and a labels.txt file. The exported model in ONNX format can be uploaded to the [test server](https://macvi.org/workshop/macvi25/challenges/usv_dist).
+Be aware that you might need to make adjustments to the export script depending on the adaptions you make to the model architecture.
 
 > [!NOTE]
 > Further information regarding model export and submission will be provided soon 
