@@ -207,7 +207,7 @@ class IDetect(nn.Module):
                     xy, wh, conf, dist = y.split((2, 2, self.nc + 1, 1), 4)  # y.tensor_split((2, 4, 5), 4)  # torch 1.8.0
                     xy = xy * (2. * self.stride[i]) + (self.stride[i] * (self.grid[i] - 0.5))  # new xy
                     wh = wh ** 2 * (4 * self.anchor_grid[i].data)  # new wh
-                    dist = self.rescale_dist(dist)  # during ONNX export we cannot use function rescale_dist
+                    dist = self.rescale_dist(dist)
                     y = torch.cat((xy, wh, conf, dist), 4)
                 z.append(y.view(bs, -1, self.no))
 
@@ -247,13 +247,14 @@ class IDetect(nn.Module):
         z = torch.cat(z, 1)
         box = z[:, :, :4]
         conf = z[:, :, 4:5]
-        score = z[:, :, 5:]
+        score = z[:, :, 5:-1]
+        dist = z[:, :, -1]
         score *= conf
         convert_matrix = torch.tensor([[1, 0, 1, 0], [0, 1, 0, 1], [-0.5, 0, 0.5, 0], [0, -0.5, 0, 0.5]],
                                            dtype=torch.float32,
                                            device=z.device)
         box @= convert_matrix
-        return (box, score)
+        return (box, score, dist)
 
 
 class IKeypoint(nn.Module):

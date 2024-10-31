@@ -19,11 +19,10 @@ class DeepStreamOutput(nn.Module):
         boxes = x[:, :, :4]  # x, y, w, h
         objectness = x[:, :, 4:5]  # objectness score
         class_scores = x[:, :, 5:-1]  # class scores
-        distances = x[:, :, -1:]  # distance value
-        scores, classes = torch.max(class_scores, 2, keepdim=True)
-        scores *= objectness
-        classes = classes.float()
-        return boxes, scores, classes, distances  # Include distances in outputs
+        distances = x[:, :, -1]  # distance value
+        #return boxes, scores, classes, distances  # Include distances in outputs
+        return torch.cat((boxes, objectness, class_scores, distances.unsqueeze(-1)), dim=-1)
+        # onnx model return one tensor of shape [batch_sz, num_anchors, [xyhw,objectness,class,dist]]
 
 
 
@@ -82,7 +81,7 @@ def main(args):
         'classes': {0: 'batch'},
         'distances': {0: 'batch'}
     }
-    output_names = ['boxes', 'scores', 'classes', 'distances']
+    output_names = ['output_tensor']
 
     print('\nExporting the model to ONNX')
     torch.onnx.export(
