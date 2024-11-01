@@ -226,7 +226,7 @@ def test(data,
             stats.append((correct.cpu(), pred[:, 4].cpu(), pred[:, 5].cpu(), tcls, pred[:,-1].cpu(), tdist))
 
         # Plot images
-        if plots and batch_i < 20:
+        if plots and batch_i < 10:
             f = save_dir / f'test_batch{batch_i}_labels.jpg'  # labels
             plot_images(img, targets, paths, f, names)
             #Thread(target=plot_images, args=(img, targets, paths, f, names), daemon=True).start()
@@ -402,11 +402,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='test.py')
     parser.add_argument('--weights', nargs='+', type=str, default='yolov7.pt', help='model.pt path(s)')
     parser.add_argument('--data', type=str, default='data/coco.yaml', help='*.data path')
-    parser.add_argument('--batch-size', type=int, default=32, help='size of each image batch')
-    parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
+    parser.add_argument('--batch-size', type=int, default=1, help='size of each image batch')
+    parser.add_argument('--img-size', type=int, default=1024, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.001, help='object confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.65, help='IOU threshold for NMS')
-    parser.add_argument('--task', default='val', help='train, val, test')
+    parser.add_argument('--task', default='test', help='train, val, test')
     parser.add_argument('--device', default='cpu', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--single-cls', action='store_true', help='treat as single-class dataset')
     parser.add_argument('--augment', action='store_true', help='augmented inference')
@@ -428,13 +428,10 @@ if __name__ == '__main__':
 
     ### dor debugging
     opt.data = "/home/marten/Uni/Semester_4/src/DistanceEstimator/Dataset/Images/data.yaml"
-    opt.task = 'test'
     opt.weights = "/home/marten/Uni/Semester_4/src/YOLOv7-DL23/best.onnx"
-    opt.img_size = 1024
-    opt.batch_size = 1
+
     opt.data = check_file(opt.data)  # check file
-    opt.device = "cpu"
-    print(opt.data)
+ 
 
     # load hyperparameters (for distance rescaling)
     hyp = None

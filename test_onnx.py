@@ -1,4 +1,5 @@
-# Inference for ONNX model
+# Inference for ONNX model without Yolov7 dataloader
+
 import os
 import cv2
 import numpy as np
