@@ -22,7 +22,7 @@ class DeepStreamOutput(nn.Module):
         distances = x[:, :, -1]  # distance value
         #return boxes, scores, classes, distances  # Include distances in outputs
         return torch.cat((boxes, objectness, class_scores, distances.unsqueeze(-1)), dim=-1)
-        # onnx model return one tensor of shape [batch_sz, num_anchors, [xyhw,objectness,class,dist]]
+        # onnx model return one tensor of shape [batch_sz, num_anchors, [xyhw,objectness,class,dist]
 
 
 
