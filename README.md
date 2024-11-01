@@ -54,22 +54,17 @@ Sample output for a model with pretrained weights:
 
 ```
 Distance bin (0.0, 200.0):
-  mean_dist_err_boat = 11.461130875618755
-  mean_dist_err_other = -1
+  mean_dist_err = 11.461130875618755
 Distance bin (200.0, 400.0):
-  mean_dist_err_boat = 19.127938123078223
-  mean_dist_err_other = -1
+  mean_dist_err = 19.127938123078223
 Distance bin (400.0, 600.0):
-  mean_dist_err_boat = 22.477531653126366
-  mean_dist_err_other = -1
+  mean_dist_err = 22.477531653126366
 Distance bin (600.0, 800.0):
-  mean_dist_err_boat = 28.41937782634907
-  mean_dist_err_other = -1
+  mean_dist_err = 28.41937782634907
 Distance bin (800.0, 1000.0):
-  mean_dist_err_boat = 52.7596413584453
-  mean_dist_err_other = -1
-Overall mean_dist_err_boat = 21.641303812311364
-Overall mean_dist_err_other = -1
+  mean_dist_err = 52.7596413584453
+Overall mean_dist_err = 21.641303812311364
+
 
                Class      Images      Labels           P           R      mAP@.5  mAP@.5:.95
                  all         522         785       0.936       0.926       0.944       0.499
@@ -120,7 +115,7 @@ Examples containing the most common buoy types:
 </p>
 
 
-The dataset follows the YOLO format convention, where images and labels are located in seperate folders and each image is linked to a corresponding labels (.txt) file.
+The dataset follows the YOLO format convention, where images and labels are located in separate folders and each image is linked to a corresponding labels (.txt) file.
 Each line in the textfile represents a bounding box:
 ```text
 class-id  center-X  center-Y  width  height  distance
@@ -134,9 +129,9 @@ Given that the challenge seeks to address both monocular distance estimation and
 The quality of object detection task for the submitted models is assessed using the mAP@[.5:.95] metric.
 The distance error is defined as follows:
 
-$$\epsilon_{Dist} = \frac{1}{n}\sum_{i}^{n} c_i \frac{|d_i-\hat{d_i}|}{d_i}$$
+$$\epsilon_{Dist} = \sum_{i=1}^{n} \frac{c_i}{\sum_{j=1}^{n} c_j} \frac{|d_i - \hat{d}_i|}{d_i}$$
 
 where $i$ is the index of the test sample, $n$ is the cardinality of the test set, $c_i$ the confidence of the prediction 
 (objectness * class probability $\rightarrow$ since we only have one class, this is equal to objectness), $d_i$ the ground 
-truth distance and $\hat{d_i} the predicted distance.
+truth distance and $\hat{d_i}$ the predicted distance.
 Since predictions for distant objects naturally have higher deviations, we employ a relative measure to also penalize smaller absolute errors for close objects. 
