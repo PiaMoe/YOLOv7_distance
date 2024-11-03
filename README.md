@@ -53,21 +53,34 @@ Make sure that the data.yaml file contains a test or val entity depending on the
 Sample output for a model with pretrained weights:
 
 ```
-Distance bin (0.0, 200.0):
-  mean_dist_err = 11.461130875618755
-Distance bin (200.0, 400.0):
-  mean_dist_err = 19.127938123078223
-Distance bin (400.0, 600.0):
-  mean_dist_err = 22.477531653126366
-Distance bin (600.0, 800.0):
-  mean_dist_err = 28.41937782634907
-Distance bin (800.0, 1000.0):
-  mean_dist_err = 52.7596413584453
-Overall mean_dist_err = 21.641303812311364
 
+Distance bin (0.0, 100.0):
+  samples:  86
+  weighted_reL_dist_err_buoy = 0.19292930631969663
+  abs_mean_dist_err_buoy = 11.940406976744185
+Distance bin (100.0, 200.0):
+  samples:  137
+  weighted_reL_dist_err_buoy = 0.08360565082374785
+  abs_mean_dist_err_buoy = 11.69662408759124
+Distance bin (200.0, 300.0):
+  samples:  136
+  weighted_reL_dist_err_buoy = 0.06673108080600361
+  abs_mean_dist_err_buoy = 16.323529411764707
+Distance bin (300.0, 400.0):
+  samples:  112
+  weighted_reL_dist_err_buoy = 0.06521386108615686
+  abs_mean_dist_err_buoy = 23.275669642857142
+Distance bin (400.0, 500.0):
+  samples:  85
+  weighted_reL_dist_err_buoy = 0.048748521277905514
+  abs_mean_dist_err_buoy = 22.36470588235294
+Total Samples:  754
+Overall weighted_rel_dist_err_buoy = 0.08089378057660616
+Overall abs_mean_dist_err_buoy = 22.749917108753316
 
-               Class      Images      Labels           P           R      mAP@.5  mAP@.5:.95
+               Class      Images      Labels           P           R      mAP@.5  mAP@.5:.95: 
                  all         522         785       0.936       0.926       0.944       0.499
+
 ```
 The Distance Error is computed for 5 distance bins. The interval size of a bin depends on the max dist hyperparameter passed to the testscript in hyp.scratch-p5.yaml.
 
