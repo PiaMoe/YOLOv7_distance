@@ -14,7 +14,7 @@ from utils.datasets import create_dataloader
 from utils.general import coco80_to_coco91_class, check_dataset, check_file, check_img_size, check_requirements, \
     box_iou, non_max_suppression, scale_coords, xyxy2xywh, xywh2xyxy, set_logging, increment_path, colorstr
 from utils.metrics import ap_per_class, ConfusionMatrix
-from utils.plots import plot_images, output_to_target, plot_study_txt, plot_dist_err
+from utils.plots import plot_images, output_to_target, plot_study_txt, plot_dist_err, plot_errors, plot_dist_pred
 from utils.torch_utils import select_device, time_synchronized, TracedModel
 
 
@@ -134,6 +134,8 @@ def test(data,
     loss = torch.zeros(4, device=device)
     jdict, stats, ap, ap_class, wandb_images = [], [], [], [], []
     distance_errors = []
+    dist_errors_plot = []
+    dist_pred_and_gt = []
     for batch_i, (img, targets, paths, shapes) in enumerate(tqdm(dataloader, desc=s)):
         img = img.to(device, non_blocking=True)
         img = img.half() if half else img.float()  # uint8 to fp16/32
@@ -249,6 +251,8 @@ def test(data,
                                 target_dist = labels[d, -1]
                                 pred_conf = pred[pi[j], 4]
                                 distance_error = abs(pred_dist - target_dist)
+                                dist_errors_plot.append([float(target_dist.cpu()), float(pred_dist.cpu() - target_dist.cpu())])
+                                dist_pred_and_gt.append([float(target_dist.cpu()), float(pred_dist.cpu())])
                                 # distance_errors.append(distance_error.item())
                                 distance_conf_and_error_and_gt = [float(pred_conf), float(distance_error), float(target_dist), float(pred_dist)]
                                 distance_errors_per_cat[int(cls)].append(distance_conf_and_error_and_gt)
@@ -296,10 +300,9 @@ def test(data,
     else:
         nt = torch.zeros(1)
 
-    # print(distance_errors)
-
-
-
+    # plot raw dist errors
+    plot_errors(dist_errors_plot, bins=5, max_dist=distance_bins[-1][1], path=os.path.join(save_dir, 'dist_errors.pdf'))
+    plot_dist_pred(dist_pred_and_gt, path = os.path.join(save_dir, 'dist_pred.pdf'))
     # Initialize dictionaries to store accumulated weighted errors and total confidences
     mean_dist_err_buoy_bins = defaultdict(float)
     abs_dist_err_buoy_bins = defaultdict(float)
@@ -394,10 +397,10 @@ def test(data,
     # Plots
     if plots:
         # plot distance errors
-        plot_dist_err(mean_abs_dist_err_buoy_bins, labelX = 'GT - Distance [m]', 
+        plot_dist_err(mean_abs_dist_err_buoy_bins, num_samples=samples_per_bin, labelX = 'GT - Distance [m]', 
                     labelY = r'$\varepsilon_A$', path=os.path.join(save_dir, "AbsoluteError.png"), color='red')
 
-        plot_dist_err(weighted_mean_dist_err_buoy_bins, labelX = 'GT - Distance [m]', 
+        plot_dist_err(weighted_mean_dist_err_buoy_bins, num_samples=samples_per_bin, labelX = 'GT - Distance [m]', 
                     labelY = r'$\varepsilon_R$', path=os.path.join(save_dir, "RelativeError.png"))
         
         confusion_matrix.plot(save_dir=save_dir, names=list(names.values()))

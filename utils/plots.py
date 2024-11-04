@@ -11,11 +11,13 @@ import cv2
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.pyplot
+from matplotlib import ticker
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import torch
 import yaml
+from tueplots.constants.color import rgb
 from PIL import Image, ImageDraw, ImageFont
 from scipy.signal import butter, filtfilt
 
@@ -501,13 +503,70 @@ def plot_skeleton_kpts(im, kpts, steps, orig_shape=None):
         cv2.line(im, pos1, pos2, (int(r), int(g), int(b)), thickness=2)
 
 
-def plot_dist_err(err_results, labelX = 'GT - Distance [m]', labelY = r'$\varepsilon$', path='err_plot.png', color='blue'):
+def plot_dist_err(err_results, num_samples = None, labelX = 'GT - Distance [m]', labelY = r'$\varepsilon$', path='err_plot.png', color='blue'):
     fig, ax = plt.subplots()
     x = [(x[0] + x[1])/2 for x in err_results]
     y = list(err_results.values())
-    ax.bar(x, y, width = 30, color=color)
+    bars = ax.bar(x, y, width = 30, color=color)
+    # Annotate each bar with the corresponding sample count
+    if num_samples is not None:
+        for bar, key in zip(bars, num_samples):
+            yval = bar.get_height()  # Get the height of the bar
+            plt.text(bar.get_x() + bar.get_width() / 2, yval, num_samples[key], ha='center', va='bottom')
+
     ax.set_ylabel(labelY)
     ax.set_xlabel(labelX)
     plt.savefig(path)
 
+def plot_errors(errors, bins, max_dist, path):
+    # group errors into bins
+    delta = max_dist/(2*bins)
+    binIdx = [max_dist/bins * x - delta for x in range(1,bins+1)]
+    grouped_data = {k:[] for k in binIdx}
+    for gt, error in errors:
+        if gt <= max_dist:
+            i = np.argmin(list(map(lambda x: abs(gt-x), binIdx)))
+            grouped_data[binIdx[i]].append(error)   # append error to bin
+
+    Nmax = np.max([len(grouped_data[k]) for k in grouped_data])
+    np.random.seed(1)
+    u = np.random.rand(Nmax)
+
+    fig, ax = plt.subplots()
+
+    colorarr = [rgb.tue_blue, rgb.tue_red]
+
+    for count, k in enumerate(grouped_data):
+        ax.plot(grouped_data[k], 0.8 * u[:len(grouped_data[k])]+0.1+count, 'o', alpha = 0.8, color=colorarr[count%2], ms = 2, mec = 'none')
+
+    ax.set_yticks([x+0.5 for x in range(0, count+1)])
+    ax.set_yticklabels([f"[{int(k-delta)}, {int(k+delta)})" for k in grouped_data], rotation=90, va="center", fontsize=7)
+
+    for y,n in zip([0+x for x in range(0, count+1)], [len(grouped_data[k]) for k in grouped_data]):
+        ax.axhline(y, color = rgb.tue_dark, alpha = 0.5)
+        t = ax.text(200, y + 0.5, str(n).rjust(3," ") + " samples", color = rgb.tue_dark, va='center', ha = 'right', fontsize = "x-small")
+        t.set_bbox(dict(facecolor='white', alpha=1.0, linewidth=0, pad=1.0))
+
+    ax.vlines(x=0, ymin=0, ymax=count+1, colors=rgb.tue_darkgreen, linestyles='dashed', alpha=0.8, linewidth=1)
+    ax.set_ylabel("Distance Bins")
+    ax.set_xlabel("pred - target [m]")
+    ax.set_ylim(0, count+1)
+
+    ax.set_title("Distance Prediction Errors")
+
+    plt.savefig(path)
+
+def plot_dist_pred(data, path):
+    fig, ax = plt.subplots()
+    for x in data:
+        if x[0] < x[1]:
+            ax.plot(x[0], x[1], 'o', alpha=0.7, color=rgb.tue_blue, markersize=3, mec='none')
+        else:
+            ax.plot(x[0], x[1], 'o', alpha=0.7, color=rgb.tue_red, markersize=3, mec='none')
+    data = np.asarray(data) 
+    ax.plot([0,np.max(data[:,0])], [0,np.max(data[:,0])], linestyle='--', color=rgb.tue_darkgreen, 
+            alpha = 0.8)
+    ax.set_ylabel("Prediction [m]")
+    ax.set_xlabel("Ground Truth Distance [m]")
+    plt.savefig(path)
     
