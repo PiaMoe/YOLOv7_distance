@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 from threading import Thread
 import onnxruntime as ort
+import onnx
+from onnx_opcounter import calculate_params
 import numpy as np
 import torch
 import yaml
@@ -52,7 +54,8 @@ def test(data,
          trace=False,
          is_coco=False, 
          v5_metric=False,
-         hyp=None):
+         hyp=None,
+         max_params=50e6):
     # Initialize/load model and set device
 
     set_logging()
@@ -67,6 +70,15 @@ def test(data,
     session = ort.InferenceSession(weights, providers=providers)
     gs = 32  # grid size (max stride)
     imgsz = check_img_size(imgsz, s=gs)  # check img_size
+
+    # compute number of parameters for onnx model and compare to max threshold
+    model = onnx.load_model(weights)
+    try:
+        params = calculate_params(model)
+    except:
+        raise ValueError("Could not compute number of parameters for onnx model.")
+    print(f"Amount of model params: {params}")
+    assert params <= max_params, f"Amount of model parameters ({params}) exceeds maximum threshold of {max_params}"
 
     # get data
     if isinstance(data, str):
@@ -419,19 +431,19 @@ if __name__ == '__main__':
     parser.add_argument('--no-trace', action='store_true', help='don`t trace model')
     parser.add_argument('--v5-metric', action='store_true', help='assume maximum recall as 1.0 in AP calculation')
     parser.add_argument('--hyp', type=str, default='', help='hyperparameters path')
+    parser.add_argument('--max-params', type=int, default=50e6, help='maximum amount of allowed parameters')
     opt = parser.parse_args()
     opt.save_json |= opt.data.endswith('coco.yaml')
     print(opt)
-    #check_requirements()
 
-    ### dor debugging
+    ### for debugging
     opt.data = "/home/marten/Uni/Semester_4/src/DistanceEstimator/Dataset/Images/data.yaml"
     opt.weights = "/home/marten/Uni/Semester_4/src/YOLOv7-DL23/best.onnx"
 
     opt.data = check_file(opt.data)  # check file
  
 
-    # load hyperparameters (for distance rescaling)
+    # load hyperparameters (for distance statistics)
     hyp = None
     if opt.hyp != '':   # if hyp param file was passed
         try:
@@ -461,5 +473,6 @@ if __name__ == '__main__':
              save_conf=opt.save_conf,
              trace=not opt.no_trace,
              v5_metric=opt.v5_metric,
-             hyp=hyp
+             hyp=hyp,
+             max_params=int(opt.max_params)
              )
