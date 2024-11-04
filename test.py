@@ -14,7 +14,7 @@ from utils.datasets import create_dataloader
 from utils.general import coco80_to_coco91_class, check_dataset, check_file, check_img_size, check_requirements, \
     box_iou, non_max_suppression, scale_coords, xyxy2xywh, xywh2xyxy, set_logging, increment_path, colorstr
 from utils.metrics import ap_per_class, ConfusionMatrix
-from utils.plots import plot_images, output_to_target, plot_study_txt
+from utils.plots import plot_images, output_to_target, plot_study_txt, plot_dist_err
 from utils.torch_utils import select_device, time_synchronized, TracedModel
 
 
@@ -26,6 +26,25 @@ def create_distance_bins(max_distance, number_bins):
     distance_bins = [(i * bin_width, (i + 1) * bin_width) for i in range(number_bins)]
 
     return distance_bins
+
+def compressBins(error_dict, sample_dict, num_new_bins = 5):
+    # function to compress a dict of n bins to a dict of num_new_bins
+    max_dist = max([k[1] for k in error_dict])    # get max dist
+    delta = max_dist/(2*num_new_bins)
+    compressedBinIdx = [max_dist/num_new_bins * x - delta for x in range(1,num_new_bins+1)] # compute new BinIndices
+    compressedBins = { # initialize compressedBins dict
+        k: {'err':0, 'n':0} for k in compressedBinIdx
+    }
+
+    for k,v in error_dict.items():
+        # find closest compressed bin
+        closestBin = np.argmin(np.asarray(list((map(lambda x: abs(x - (k[0]+k[1])/2), compressedBinIdx)))))
+        compressedBins[compressedBinIdx[closestBin]]['n'] += sample_dict[k]    # increment counter by 1
+        compressedBins[compressedBinIdx[closestBin]]['err'] += v  # add error
+
+    # compute average error 
+    return {(k-delta, k+delta): {'err': v['err']/v['n'], 'n': v['n']} for k,v in compressedBins.items()}
+
 
 def test(data,
          weights=None,
@@ -250,9 +269,10 @@ def test(data,
     stats = [np.concatenate(x, 0) for x in zip(*stats)]  # to numpy
 
     if hyp is not None:
-        distance_bins = create_distance_bins(hyp["max_distance"], 5)
+        distance_bins = create_distance_bins(hyp["max_distance"], 10)
     else:
-        distance_bins = create_distance_bins(1000, 5)   # use default dist of 1000 m if no hyperparameters passed
+        distance_bins = create_distance_bins(1000, 10)   # use default dist of 1000 m if no hyperparameters passed
+
     # print(distance_bins)
     # distance_bins = [(0, 50), (50, 100), (100, 150), (200, 250), (250, 300), (300, 500), (500, 700), (700, 1000)]
     if len(stats) and stats[0].any():
@@ -309,6 +329,10 @@ def test(data,
                         samples_per_bin[bin_key] +=1
                         break
 
+    # compress bins for console logging
+    mean_abs_dist_err_buoy_comp = compressBins(abs_dist_err_buoy_bins, samples_per_bin)
+    weighted_mean_dist_err_buoy_comp = compressBins(mean_dist_err_buoy_bins, total_conf_buoy_bins)
+
     # Calculate the weighted mean distance error for each bin
     weighted_mean_dist_err_buoy_bins = {
         bin_key: mean_dist_err_buoy_bins[bin_key] / total_conf_buoy_bins[bin_key]
@@ -329,22 +353,23 @@ def test(data,
     # Calculate the overall weighted mean distance error
     overall_weighted_mean_dist_err_buoy = total_mean_dist_err_buoy / total_conf_buoy if total_conf_buoy > 0 else -1
     metrics_bin_distances = {}
+
+
     # Print the results for each bin
-    for bin_key in distance_bins:
+    for bin_key in mean_abs_dist_err_buoy_comp:
         print(f"Distance bin {bin_key}:")
-        print("  samples: ", samples_per_bin[bin_key])
-        print("  weighted_reL_dist_err_buoy =", weighted_mean_dist_err_buoy_bins[bin_key])
-        print("  abs_mean_dist_err_buoy =", mean_abs_dist_err_buoy_bins[bin_key])
-        metrics_bin_distances["metrics/distancebins/weighted_rel_dist_err_buoy_"+str(bin_key)] = weighted_mean_dist_err_buoy_bins[bin_key]
-        metrics_bin_distances["metrics/distancebins/abs_mean_dist_err_buoy_"+str(bin_key)] = mean_abs_dist_err_buoy_bins[bin_key]
+        print("  samples: ", mean_abs_dist_err_buoy_comp[bin_key]['n'])
+        print("  weighted_reL_dist_err_buoy =", weighted_mean_dist_err_buoy_comp[bin_key]['err'])
+        print("  abs_mean_dist_err_buoy =", mean_abs_dist_err_buoy_comp[bin_key]['err'])
+        metrics_bin_distances["metrics/distancebins/weighted_rel_dist_err_buoy_"+str(bin_key)] = weighted_mean_dist_err_buoy_comp[bin_key]['err']
+        metrics_bin_distances["metrics/distancebins/abs_mean_dist_err_buoy_"+str(bin_key)] = mean_abs_dist_err_buoy_comp[bin_key]['err']
     if not wandb_logger is None:
         wandb_logger.log(metrics_bin_distances)
+
     # Print the overall results
     print("Total Samples: ", samples)
     print("Overall weighted_rel_dist_err_buoy =", overall_weighted_mean_dist_err_buoy)
     print("Overall abs_mean_dist_err_buoy =", mean_abs_dist_err_buoy)
-
-
     metrics_overall_distance = {}
     metrics_overall_distance["metrics/weighted_rel_dist_err_buoy"] = overall_weighted_mean_dist_err_buoy
     metrics_overall_distance["metrics/abs_mean_dist_err_buoy"] = mean_abs_dist_err_buoy
@@ -368,6 +393,13 @@ def test(data,
 
     # Plots
     if plots:
+        # plot distance errors
+        plot_dist_err(mean_abs_dist_err_buoy_bins, labelX = 'GT - Distance [m]', 
+                    labelY = r'$\varepsilon_A$', path=os.path.join(save_dir, "AbsoluteError.png"), color='red')
+
+        plot_dist_err(weighted_mean_dist_err_buoy_bins, labelX = 'GT - Distance [m]', 
+                    labelY = r'$\varepsilon_R$', path=os.path.join(save_dir, "RelativeError.png"))
+        
         confusion_matrix.plot(save_dir=save_dir, names=list(names.values()))
         if wandb_logger and wandb_logger.wandb:
             val_batches = [wandb_logger.wandb.Image(str(f), caption=f.name) for f in sorted(save_dir.glob('test*.jpg'))]

@@ -1,4 +1,5 @@
 # Inference for ONNX model without Yolov7 dataloader
+# No statistics, but detecions are visualized including dist for each frame
 
 import os
 import cv2
@@ -77,15 +78,7 @@ if __name__ == "__main__":
     session = ort.InferenceSession(onnx_model_path, providers=providers)
     if not os.path.exists(target_folder):
         os.mkdir(target_folder)
-
-    # prepare statistics
-    iouv = torch.linspace(0.5, 0.95, 10).to(device)  # iou vector for mAP@0.5:0.95
-    niou = iouv.numel()
-    s = ('%20s' + '%12s' * 6) % ('Class', 'Images', 'Labels', 'P', 'R', 'mAP@.5', 'mAP@.5:.95')
-    p, r, f1, mp, mr, map50, map, t0, t1 = 0., 0., 0., 0., 0., 0., 0., 0., 0.
-    jdict, stats, ap, ap_class, wandb_images = [], [], [], [], []
-    distance_errors = []
-    
+ 
     for image in img_list:
         # run ingerence on images with onnx model
         img_resized, results = run_inference(session, image, conf, iou)

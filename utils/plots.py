@@ -10,6 +10,7 @@ from pathlib import Path
 import cv2
 import matplotlib
 import matplotlib.pyplot as plt
+import matplotlib.pyplot
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -498,3 +499,15 @@ def plot_skeleton_kpts(im, kpts, steps, orig_shape=None):
         if pos2[0] % 640 == 0 or pos2[1] % 640 == 0 or pos2[0]<0 or pos2[1]<0:
             continue
         cv2.line(im, pos1, pos2, (int(r), int(g), int(b)), thickness=2)
+
+
+def plot_dist_err(err_results, labelX = 'GT - Distance [m]', labelY = r'$\varepsilon$', path='err_plot.png', color='blue'):
+    fig, ax = plt.subplots()
+    x = [(x[0] + x[1])/2 for x in err_results]
+    y = list(err_results.values())
+    ax.bar(x, y, width = 30, color=color)
+    ax.set_ylabel(labelY)
+    ax.set_xlabel(labelX)
+    plt.savefig(path)
+
+    

@@ -1,4 +1,5 @@
 # Script to evalueate ONNX Model with YOLOv7 Object Detection & Distance Metrics
+# Similar to test.py script that uses pytorch framework
 
 import argparse
 import json
@@ -108,7 +109,7 @@ def test(data,
     seen = 0
     confusion_matrix = ConfusionMatrix(nc=nc)
     coco91class = coco80_to_coco91_class()
-    names = ["nav_buoy"]
+    names = {0: "nav_buoy"}
     s = ('%20s' + '%12s' * 6) % ('Class', 'Images', 'Labels', 'P', 'R', 'mAP@.5', 'mAP@.5:.95')
     p, r, f1, mp, mr, map50, map, t0, t1 = 0., 0., 0., 0., 0., 0., 0., 0., 0.
     jdict, stats, ap, ap_class, wandb_images = [], [], [], [], []
@@ -228,7 +229,7 @@ def test(data,
                                 pred_dist = pred[pi[j], -1]
                                 target_dist = labels[d, -1]
                                 pred_conf = pred[pi[j], 4]
-                                distance_error = abs(pred_dist - target_dist) / target_dist # relative dist error
+                                distance_error = abs(pred_dist - target_dist) # relative dist error
                                 distance_conf_and_error_and_gt = [float(pred_conf), float(distance_error), float(target_dist), float(pred_dist)]
                                 distance_errors_per_cat[int(cls)].append(distance_conf_and_error_and_gt)
                                 if len(detected) == nl:  # all targets already located in image
@@ -434,11 +435,12 @@ if __name__ == '__main__':
     parser.add_argument('--max-params', type=int, default=50e6, help='maximum amount of allowed parameters')
     opt = parser.parse_args()
     opt.save_json |= opt.data.endswith('coco.yaml')
-    print(opt)
 
     ### for debugging
     opt.data = "/home/marten/Uni/Semester_4/src/DistanceEstimator/Dataset/Images/data.yaml"
     opt.weights = "/home/marten/Uni/Semester_4/src/YOLOv7-DL23/best.onnx"
+    opt.save_json = False
+    print(opt)
 
     opt.data = check_file(opt.data)  # check file
  
