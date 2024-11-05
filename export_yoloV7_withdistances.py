@@ -109,7 +109,7 @@ def main(args):
 def parse_args():
     parser = argparse.ArgumentParser(description='DeepStream YOLOv7 conversion')
     parser.add_argument('-w', '--weights', required=True, help='Input weights (.pt) file path (required)')
-    parser.add_argument('-s', '--size', nargs='+', type=int, default=[640], help='Inference size [H,W] (default [640])')
+    parser.add_argument('-s', '--size', nargs='+', type=int, default=[1024], help='Inference size [H,W] (default [640])')
     parser.add_argument('--p6', action='store_true', help='P6 model')
     parser.add_argument('--opset', type=int, default=12, help='ONNX opset version')
     parser.add_argument('--simplify', action='store_true', help='ONNX simplify model')
