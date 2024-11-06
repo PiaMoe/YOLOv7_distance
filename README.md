@@ -100,18 +100,27 @@ The first number is the confidence value, the second number the metric distance 
 ## Export
 
 You need to export your model to ONNX to be evaluated on the
-server for getting displayed on the leaderboard.
+server for getting displayed on the [leaderboard](https://macvi.org/leaderboard/surface/distEstimation/distance-estimation).
 
 To export the model provided in this repo, run:
 ``` shell
 python YOLOv7-DL23/export_yoloV7_withdistances.py --weights 'YOLOv7-DL23/init_weights.pt' --size 1024 1024
 ```
-This will create an .onnx file and a labels.txt file. The exported model in ONNX format can be uploaded to the [test server](https://macvi.org/workshop/macvi25/challenges/usv_dist).
+This will create an .onnx file and a labels.txt file. The exported model in ONNX format can be uploaded to the [testserver](https://macvi.org/upload?track=Distance+Estimation)
 Be aware that you might need to make adjustments to the export script depending on the adaptions you make to the model architecture.
 
 > [!NOTE]
-> Further information regarding model export and submission will be provided soon 
+> Model submission requirements:
+> - Model Parameters not exceeding 50 million
+> - Exported for image size of 1024x1024
+> - NMS not included
+> - Output tensor Format: [batch_sz, num_anchors, [xyhw,objectness,class,dist]]
 
+To test whether your exported ONNX model meets the specifications you can run:
+``` shell
+python YOLOv7-DL23/testscript_onnx.py --weights 'YOLOv7-DL23/model.onnx' --data 'path/to/data.yaml'
+```
+The script is similar to the test.py file but uses the ONNX model instead of relying on the pytorch framework. An almost identical script is used on the testserver.
 ## Dataset
 The [Dataset](https://drive.google.com/drive/folders/1M-K03ELa1Lf8Ob-sVJFEFMBrpQMS0210?hl=de) contains around 3000 images of maritime navigational aids (mostly red/green buoy markers). You are only provided with a training set. 
 The testset is withheld to create a benchmark for all submitted models during the competition.
