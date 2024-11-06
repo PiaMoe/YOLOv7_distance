@@ -437,10 +437,10 @@ if __name__ == '__main__':
     opt.save_json |= opt.data.endswith('coco.yaml')
 
     ### for debugging
-    opt.data = "/home/marten/Uni/Semester_4/src/DistanceEstimator/Dataset/Images/data.yaml"
-    opt.weights = "/home/marten/Uni/Semester_4/src/YOLOv7-DL23/best.onnx"
-    opt.save_json = False
-    print(opt)
+    #opt.data = "/home/marten/Uni/Semester_4/src/DistanceEstimator/Dataset/Images/data.yaml"
+    #opt.weights = "/home/marten/Uni/Semester_4/src/YOLOv7-DL23/best.onnx"
+    #opt.save_json = False
+    #print(opt)
 
     opt.data = check_file(opt.data)  # check file
  
