@@ -84,7 +84,7 @@ Distance bin (800.0, 1000.0):
 Total Samples:  2907
 Overall weighted_rel_dist_err_buoy = 0.18248750203805492
 Overall abs_mean_dist_err_buoy = 60.99138394392845
-
+Combined Metric =  0.22202799959332511
 
                 Class      Images      Labels        P           R         mAP@.5    mAP@.5:.95:
                  all        2268        3439       0.773       0.639       0.669       0.272
