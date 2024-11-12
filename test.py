@@ -380,6 +380,9 @@ def test(data,
     overall_weighted_mean_dist_err_buoy = total_mean_dist_err_buoy / total_conf_buoy if total_conf_buoy > 0 else -1
     metrics_bin_distances = {}
 
+    # compute combined metric between mAP@0.5:0.95 and err_weighted_dist_rel+
+    combined_metric = map * (1 - min(overall_weighted_mean_dist_err_buoy, 1))
+
 
     # Print the results for each bin
     for bin_key in mean_abs_dist_err_buoy_comp:
@@ -396,9 +399,11 @@ def test(data,
     print("Total Samples: ", samples)
     print("Overall weighted_rel_dist_err_buoy =", overall_weighted_mean_dist_err_buoy)
     print("Overall abs_mean_dist_err_buoy =", mean_abs_dist_err_buoy)
+    print("Combined Metric = ", combined_metric)
     metrics_overall_distance = {}
     metrics_overall_distance["metrics/weighted_rel_dist_err_buoy"] = overall_weighted_mean_dist_err_buoy
     metrics_overall_distance["metrics/abs_mean_dist_err_buoy"] = mean_abs_dist_err_buoy
+    metrics_overall_distance["metrics/combined_metric"] = combined_metric 
     if not wandb_logger is None:
         wandb_logger.log(metrics_overall_distance)
 
