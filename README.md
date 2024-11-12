@@ -38,9 +38,17 @@ python -m torch.distributed.launch --nproc_per_node 4 --master_port 9527 YOLOv7-
 ```
 You may have to replace the --local-rank argument in the train.py script with --local_rank depending on your CUDA version.
 
+<br/>
+
+The *results.txt* file has the following format:
+```
+Epoch  GPUMem  train_box  train_obj  train_cls  train_dist  total  labels  img_size  precision  recall  map0.5  map.5:.95  val_box  val_obj  val_cls  val_dist
+```
+The generated *results.png* file displays box, objectness and distance loss on the train and validatin set.
+
 ## Testing
 > [!NOTE]
-> Pretrained Weights are available [here](https://drive.google.com/drive/folders/1GujICE9Ev-ppfH4PUX19UjywqgFn-5Zf?hl=de) 
+> :pushpin: Pretrained Weights are available [here](https://drive.google.com/drive/folders/1GujICE9Ev-ppfH4PUX19UjywqgFn-5Zf?hl=de) 
 
 Using the pretrained model, you can evaluate its performance w.r.t. object detection and distance estimation:
 
@@ -53,7 +61,6 @@ Make sure that the data.yaml file contains a test or val entity depending on the
 Sample output for a model with pretrained weights on testsplit:
 
 ```
-
 Distance bin (0.0, 200.0):
   samples:  877
   weighted_reL_dist_err_buoy = 0.19412737838630373
@@ -78,10 +85,9 @@ Total Samples:  2907
 Overall weighted_rel_dist_err_buoy = 0.18248750203805492
 Overall abs_mean_dist_err_buoy = 60.99138394392845
 
+
                 Class      Images      Labels        P           R         mAP@.5    mAP@.5:.95:
                  all        2268        3439       0.773       0.639       0.669       0.272
-
-
 ```
 The Distance Error is computed for 5 distance bins. The interval size of a bin depends on the max dist hyperparameter passed to the testscript in hyp.scratch-p5.yaml.
 
@@ -107,7 +113,7 @@ To export the model provided in this repo, run:
 ``` shell
 python YOLOv7-DL23/export_yoloV7_withdistances.py --weights 'YOLOv7-DL23/init_weights.pt' --size 1024 1024
 ```
-This will create an .onnx file and a labels.txt file. The exported model in ONNX format can be uploaded to the [testserver](https://macvi.org/upload?track=Distance+Estimation)
+This will create an .onnx file and a labels.txt file. The exported model in ONNX format can be uploaded to the [testserver](https://macvi.org/upload?track=Distance+Estimation).
 Be aware that you might need to make adjustments to the export script depending on the adaptions you make to the model architecture.
 
 > [!NOTE]
