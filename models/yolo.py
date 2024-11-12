@@ -77,10 +77,11 @@ class Detect(nn.Module):
                         raise ValueError("no normalization strategy defined")
                     y[..., -1] = torch.clip(y[..., -1], 0, self.max_distance)
                 else:
-                    xy, wh, conf = y.split((2, 2, self.nc + 1, 1), 4)  # y.tensor_split((2, 4, 5), 4)  # torch 1.8.0
+                    xy, wh, conf, dist = y.split((2, 2, self.nc + 1, 1), 4)  # y.tensor_split((2, 4, 5), 4)  # torch 1.8.0
                     xy = xy * (2. * self.stride[i]) + (self.stride[i] * (self.grid[i] - 0.5))  # new xy
                     wh = wh ** 2 * (4 * self.anchor_grid[i].data)  # new wh
-                    y = torch.cat((xy, wh, conf), 4)
+                    dist = dist * self.max_distance     # at the moment we only support Linear normalization for ONNX exports in Detect -> Use IDetect instead
+                    y = torch.cat((xy, wh, conf, dist), 4)
                 z.append(y.view(bs, -1, self.no))
 
         if self.training:

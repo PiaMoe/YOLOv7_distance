@@ -151,7 +151,30 @@ def test(data,
 
             # Compute loss
             if compute_loss:
-                loss += compute_loss([x.float() for x in train_out], targets)[1][:4]  # box, obj, cls, dist
+                # when computing loss we need to normalize target dist, 
+                # since it is compared to train_out, which is in range [0-1]
+                loss_targets = targets.clone()
+
+                if hyp is not None: 
+                    max_distance = hyp["max_distance"]
+                    loss_targets [:, -1] = torch.clamp(loss_targets[:, -1], 0, max_distance)  # clamp distances to max_distance at most
+                    if hyp["normalization_strategy"] == 'log':
+                        loss_targets[:, -1] = torch.log(loss_targets[:, -1] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
+                        loss_targets[:, -1] = loss_targets[:, -1] / torch.log(max_distance)
+                    elif hyp["normalization_strategy"] == 'log_negative':
+                        loss_targets[:, -1] = torch.log(loss_targets[:, -1] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
+                        loss_targets[:, -1] = labels[:, -1] / torch.log(max_distance) - 0.5
+                    elif hyp["normalization_strategy"] == 'linear':
+                        loss_targets[:, -1] = loss_targets[:, -1] / max_distance
+                    elif hyp["normalization_strategy"] == 'linear_negative':
+                        loss_targets[:, -1] = loss_targets[:, -1] / max_distance - 0.5
+                    else:
+                        raise ValueError("no normalization strategy defined (in hyperparameter file)")
+                else:
+                    # if no hyperparameter file passed use default normalization strategy (linear, max_dist = 1km)
+                    loss_targets[:, -1] = loss_targets[:, -1] / 1000
+                
+                loss += compute_loss([x.float() for x in train_out], loss_targets)[1][:4]  # box, obj, cls, dist
 
             # Run NMS
             targets[:, 2:-1] *= torch.Tensor([width, height, width, height]).to(device)  # to pixels
