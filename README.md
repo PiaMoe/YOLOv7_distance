@@ -19,7 +19,7 @@ Currently, it only supports the "normal" YOLOv7 model, not
 bigger ones. If you deviate from any of the below settings,
 please make sure the network layers (the head) is correct.
 
-You can download the dataset (and potentially pretrained weights)
+You can download the dataset and pretrained weights
 as per the [challenge webpages](https://macvi.org/workshop/macvi25/challenges/usv_dist). 
 
 The following instructions guide you through training the adapted model and running inference on images and video.
@@ -40,7 +40,7 @@ You may have to replace the --local-rank argument in the train.py script with --
 
 ## Testing
 > [!NOTE]
-> We will provide pretrained weights for this model on the training dataset in the near future
+> Pretrained Weights are available [here](https://drive.google.com/drive/folders/1GujICE9Ev-ppfH4PUX19UjywqgFn-5Zf?hl=de) 
 
 Using the pretrained model, you can evaluate its performance w.r.t. object detection and distance estimation:
 
@@ -50,36 +50,37 @@ python YOLOv7-DL23/test.py --data 'path/to/data.yaml' --img 1024 --batch 4 --con
 Make sure that the data.yaml file contains a test or val entity depending on the task argument.
 
 
-Sample output for a model with pretrained weights:
+Sample output for a model with pretrained weights on testsplit:
 
 ```
 
-Distance bin (0.0, 100.0):
-  samples:  86
-  weighted_reL_dist_err_buoy = 0.19292930631969663
-  abs_mean_dist_err_buoy = 11.940406976744185
-Distance bin (100.0, 200.0):
-  samples:  137
-  weighted_reL_dist_err_buoy = 0.08360565082374785
-  abs_mean_dist_err_buoy = 11.69662408759124
-Distance bin (200.0, 300.0):
-  samples:  136
-  weighted_reL_dist_err_buoy = 0.06673108080600361
-  abs_mean_dist_err_buoy = 16.323529411764707
-Distance bin (300.0, 400.0):
-  samples:  112
-  weighted_reL_dist_err_buoy = 0.06521386108615686
-  abs_mean_dist_err_buoy = 23.275669642857142
-Distance bin (400.0, 500.0):
-  samples:  85
-  weighted_reL_dist_err_buoy = 0.048748521277905514
-  abs_mean_dist_err_buoy = 22.36470588235294
-Total Samples:  754
-Overall weighted_rel_dist_err_buoy = 0.08089378057660616
-Overall abs_mean_dist_err_buoy = 22.749917108753316
+Distance bin (0.0, 200.0):
+  samples:  877
+  weighted_reL_dist_err_buoy = 0.19412737838630373
+  abs_mean_dist_err_buoy = 25.058669469783354
+Distance bin (200.0, 400.0):
+  samples:  812
+  weighted_reL_dist_err_buoy = 0.2057969997856522
+  abs_mean_dist_err_buoy = 64.8434421182266
+Distance bin (400.0, 600.0):
+  samples:  790
+  weighted_reL_dist_err_buoy = 0.1542782489203172
+  abs_mean_dist_err_buoy = 70.57278481012658
+Distance bin (600.0, 800.0):
+  samples:  350
+  weighted_reL_dist_err_buoy = 0.13248381672101447
+  abs_mean_dist_err_buoy = 107.10892857142858
+Distance bin (800.0, 1000.0):
+  samples:  69
+  weighted_reL_dist_err_buoy = 0.1258767028866825
+  abs_mean_dist_err_buoy = 110.01449275362319
+Total Samples:  2907
+Overall weighted_rel_dist_err_buoy = 0.18248750203805492
+Overall abs_mean_dist_err_buoy = 60.99138394392845
 
-               Class      Images      Labels           P           R      mAP@.5  mAP@.5:.95: 
-                 all         522         785       0.936       0.926       0.944       0.499
+                Class      Images      Labels        P           R         mAP@.5    mAP@.5:.95:
+                 all        2268        3439       0.773       0.639       0.669       0.272
+
 
 ```
 The Distance Error is computed for 5 distance bins. The interval size of a bin depends on the max dist hyperparameter passed to the testscript in hyp.scratch-p5.yaml.
