@@ -542,7 +542,7 @@ def plot_errors(errors, bins, max_dist, path):
     for count, k in enumerate(grouped_data):
         ax.plot(grouped_data[k], 0.8 * u[:len(grouped_data[k])]+0.1+count, 'o', alpha = 0.5, color=colorarr[count%2], ms = 2, mec = 'none')
         # perform kernel density estimation
-        if len(grouped_data[k] > 1):
+        if len(grouped_data[k]) > 1:
             kde = gaussian_kde(grouped_data[k], bw_method='scott')  # 'scott' or 'silverman' are common choices for bandwidth
             x_values = np.linspace(np.min(plotted_errors), np.max(plotted_errors), 1000)
             kde_values = kde(x_values)
