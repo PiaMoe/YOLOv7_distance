@@ -20,6 +20,7 @@ import yaml
 from tueplots.constants.color import rgb
 from PIL import Image, ImageDraw, ImageFont
 from scipy.signal import butter, filtfilt
+from scipy.stats import gaussian_kde
 
 from utils.general import xywh2xyxy, xyxy2xywh
 from utils.metrics import fitness
@@ -532,22 +533,32 @@ def plot_errors(errors, bins, max_dist, path):
     np.random.seed(1)
     u = np.random.rand(Nmax)
 
+    plotted_errors = np.concatenate(list(grouped_data.values()))
+
     fig, ax = plt.subplots()
 
     colorarr = [rgb.tue_blue, rgb.tue_red]
 
     for count, k in enumerate(grouped_data):
-        ax.plot(grouped_data[k], 0.8 * u[:len(grouped_data[k])]+0.1+count, 'o', alpha = 0.8, color=colorarr[count%2], ms = 2, mec = 'none')
+        ax.plot(grouped_data[k], 0.8 * u[:len(grouped_data[k])]+0.1+count, 'o', alpha = 0.5, color=colorarr[count%2], ms = 2, mec = 'none')
+        # perform kernel density estimation
+        kde = gaussian_kde(grouped_data[k], bw_method='scott')  # 'scott' or 'silverman' are common choices for bandwidth
+        x_values = np.linspace(np.min(plotted_errors), np.max(plotted_errors), 1000)
+        kde_values = kde(x_values)
+        # normalize kde between 0-1
+        kde_values = 0.8 * kde_values / np.max(kde_values) +0.1+count
+        ax.plot(x_values, kde_values, color = rgb.tue_dark, alpha = 0.9, linewidth=0.7, linestyle='dashed')
+
 
     ax.set_yticks([x+0.5 for x in range(0, count+1)])
     ax.set_yticklabels([f"[{int(k-delta)}, {int(k+delta)})" for k in grouped_data], rotation=90, va="center", fontsize=7)
 
     for y,n in zip([0+x for x in range(0, count+1)], [len(grouped_data[k]) for k in grouped_data]):
         ax.axhline(y, color = rgb.tue_dark, alpha = 0.5)
-        t = ax.text(200, y + 0.5, str(n).rjust(3," ") + " samples", color = rgb.tue_dark, va='center', ha = 'right', fontsize = "x-small")
+        t = ax.text(np.max(plotted_errors), y + 0.5, str(n).rjust(3," ") + " samples", color = rgb.tue_dark, va='center', ha = 'right', fontsize = "x-small")
         t.set_bbox(dict(facecolor='white', alpha=1.0, linewidth=0, pad=1.0))
 
-    ax.vlines(x=0, ymin=0, ymax=count+1, colors=rgb.tue_darkgreen, linestyles='dashed', alpha=0.8, linewidth=1)
+    ax.vlines(x=0, ymin=0, ymax=count+1, colors=rgb.tue_darkgreen, linestyles='dashed', alpha=1, linewidth=1)
     ax.set_ylabel("Distance Bins")
     ax.set_xlabel("pred - target [m]")
     ax.set_ylim(0, count+1)
@@ -560,12 +571,12 @@ def plot_dist_pred(data, path):
     fig, ax = plt.subplots()
     for x in data:
         if x[0] < x[1]:
-            ax.plot(x[0], x[1], 'o', alpha=0.7, color=rgb.tue_blue, markersize=3, mec='none')
+            ax.plot(x[0], x[1], 'o', alpha=0.6, color=rgb.tue_blue, markersize=3, mec='none')
         else:
-            ax.plot(x[0], x[1], 'o', alpha=0.7, color=rgb.tue_red, markersize=3, mec='none')
+            ax.plot(x[0], x[1], 'o', alpha=0.6, color=rgb.tue_red, markersize=3, mec='none')
     data = np.asarray(data) 
     ax.plot([0,np.max(data[:,0])], [0,np.max(data[:,0])], linestyle='--', color=rgb.tue_darkgreen, 
-            alpha = 0.8)
+            alpha = 1)
     ax.set_ylabel("Prediction [m]")
     ax.set_xlabel("Ground Truth Distance [m]")
     plt.savefig(path)
