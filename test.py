@@ -323,9 +323,6 @@ def test(data,
     else:
         nt = torch.zeros(1)
 
-    # plot raw dist errors
-    plot_errors(dist_errors_plot, bins=5, max_dist=distance_bins[-1][1], path=os.path.join(save_dir, 'dist_errors.pdf'))
-    plot_dist_pred(dist_pred_and_gt, path = os.path.join(save_dir, 'dist_pred.pdf'))
     # Initialize dictionaries to store accumulated weighted errors and total confidences
     mean_dist_err_buoy_bins = defaultdict(float)
     abs_dist_err_buoy_bins = defaultdict(float)
@@ -430,6 +427,10 @@ def test(data,
 
         plot_dist_err(weighted_mean_dist_err_buoy_bins, num_samples=samples_per_bin, labelX = 'GT - Distance [m]', 
                     labelY = r'$\varepsilon_R$', path=os.path.join(save_dir, "RelativeError.png"))
+        
+        # plot raw dist errors
+        plot_errors(dist_errors_plot, bins=5, max_dist=distance_bins[-1][1], path=os.path.join(save_dir, 'dist_errors.pdf'))
+        plot_dist_pred(dist_pred_and_gt, path = os.path.join(save_dir, 'dist_pred.pdf'))
         
         confusion_matrix.plot(save_dir=save_dir, names=list(names.values()))
         if wandb_logger and wandb_logger.wandb:
