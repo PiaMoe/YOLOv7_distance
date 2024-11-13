@@ -43,7 +43,7 @@ def compressBins(error_dict, sample_dict, num_new_bins = 5):
         compressedBins[compressedBinIdx[closestBin]]['err'] += v  # add error
 
     # compute average error 
-    return {(k-delta, k+delta): {'err': v['err']/v['n'], 'n': v['n']} for k,v in compressedBins.items()}
+    return {(k-delta, k+delta): {'err': v['err']/(v['n']+0.0001), 'n': v['n']} for k,v in compressedBins.items()}
 
 
 def test(data,
