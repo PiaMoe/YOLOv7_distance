@@ -162,5 +162,11 @@ $$\epsilon_{Dist} = \sum_{i=1}^{n} \frac{c_i}{\sum_{j=1}^{n} c_j} \frac{|d_i - \
 
 where $i$ is the index of the test sample, $n$ is the cardinality of the test set, $c_i$ the confidence of the prediction 
 (objectness * class probability $\rightarrow$ since we only have one class, this is equal to objectness), $d_i$ the ground 
-truth distance and $\hat{d_i}$ the predicted distance.
+truth distance and $\hat{d}_i$ the predicted distance.
 Since predictions for distant objects naturally have higher deviations, we employ a relative measure to also penalize smaller absolute errors for close objects. 
+
+To produce a final score for the submitted models, which takes the object detection performance and the distance error into account, the combined metric is specified as:
+
+$$\text{Combined Metric} = \text{mAP@[0.5:0.95]} \cdot (1 - \min(\epsilon_{Dist}, 1))$$
+
+The final rankings of the challenge are based on this score.
