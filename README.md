@@ -1,310 +1,172 @@
-# Official YOLOv7
+# YOLOv7 with Distance Estimation
 
-Implementation of paper - [YOLOv7: Trainable bag-of-freebies sets new state-of-the-art for real-time object detectors](https://arxiv.org/abs/2207.02696)
+This forked and adjusted repo has scripts and methods for training a [YOLOv7](https://github.com/WongKinYiu/yolov7) 
+detection model including distance predictions. For each
+anchor, it additionally predicts the normalized metric distance of that
+object and concatenates this with the default YOLOv7 Detection Vector containing
+class predictions, objectness and boundingbox dimensions.
+During inference, the normalized distance is rescaled according to the defined maximum distance.
+Objects are only lateral marks, they can come in 
+different shapes or forms, e.g. see [Dataset](#dataset). 
 
-[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/yolov7-trainable-bag-of-freebies-sets-new/real-time-object-detection-on-coco)](https://paperswithcode.com/sota/real-time-object-detection-on-coco?p=yolov7-trainable-bag-of-freebies-sets-new)
-[![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/akhaliq/yolov7)
-<a href="https://colab.research.google.com/gist/AlexeyAB/b769f5795e65fdab80086f6cb7940dae/yolov7detection.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"></a>
-[![arxiv.org](http://img.shields.io/badge/cs.CV-arXiv%3A2207.02696-B31B1B.svg)](https://arxiv.org/abs/2207.02696)
+The train set may contain ambiguous object appearances in that
+some marks are not visibly distinguishable from other types
+of navigational or other maritime marks. Feel free to blacken 
+these yourself. The test set is largely free of these ambiguities
+and mostly contains scenes without "distractor" marks.
 
-<div align="center">
-    <a href="./">
-        <img src="./figure/performance.png" width="79%"/>
-    </a>
-</div>
+Currently, it only supports the "normal" YOLOv7 model, not
+bigger ones. If you deviate from any of the below settings,
+please make sure the network layers (the head) is correct.
 
-## Web Demo
+You can download the dataset and pretrained weights
+as per the [challenge webpages](https://macvi.org/workshop/macvi25/challenges/usv_dist). 
 
-- Integrated into [Huggingface Spaces 🤗](https://huggingface.co/spaces/akhaliq/yolov7) using Gradio. Try out the Web Demo [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/akhaliq/yolov7)
-
-## Performance 
-
-MS COCO
-
-| Model | Test Size | AP<sup>test</sup> | AP<sub>50</sub><sup>test</sup> | AP<sub>75</sub><sup>test</sup> | batch 1 fps | batch 32 average time |
-| :-- | :-: | :-: | :-: | :-: | :-: | :-: |
-| [**YOLOv7**](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7.pt) | 640 | **51.4%** | **69.7%** | **55.9%** | 161 *fps* | 2.8 *ms* |
-| [**YOLOv7-X**](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7x.pt) | 640 | **53.1%** | **71.2%** | **57.8%** | 114 *fps* | 4.3 *ms* |
-|  |  |  |  |  |  |  |
-| [**YOLOv7-W6**](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-w6.pt) | 1280 | **54.9%** | **72.6%** | **60.1%** | 84 *fps* | 7.6 *ms* |
-| [**YOLOv7-E6**](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-e6.pt) | 1280 | **56.0%** | **73.5%** | **61.2%** | 56 *fps* | 12.3 *ms* |
-| [**YOLOv7-D6**](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-d6.pt) | 1280 | **56.6%** | **74.0%** | **61.8%** | 44 *fps* | 15.0 *ms* |
-| [**YOLOv7-E6E**](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-e6e.pt) | 1280 | **56.8%** | **74.4%** | **62.1%** | 36 *fps* | 18.7 *ms* |
-
-## Installation
-
-Docker environment (recommended)
-<details><summary> <b>Expand</b> </summary>
-
-``` shell
-# create the docker container, you can change the share memory size if you have more.
-nvidia-docker run --name yolov7 -it -v your_coco_path/:/coco/ -v your_code_path/:/yolov7 --shm-size=64g nvcr.io/nvidia/pytorch:21.08-py3
-
-# apt install required packages
-apt update
-apt install -y zip htop screen libgl1-mesa-glx
-
-# pip install required packages
-pip install seaborn thop
-
-# go to code folder
-cd /yolov7
-```
-
-</details>
-
-## Testing
-
-[`yolov7.pt`](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7.pt) [`yolov7x.pt`](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7x.pt) [`yolov7-w6.pt`](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-w6.pt) [`yolov7-e6.pt`](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-e6.pt) [`yolov7-d6.pt`](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-d6.pt) [`yolov7-e6e.pt`](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-e6e.pt)
-
-``` shell
-python test.py --data data/coco.yaml --img 640 --batch 32 --conf 0.001 --iou 0.65 --device 0 --weights yolov7.pt --name yolov7_640_val
-```
-
-You will get the results:
-
-```
- Average Precision  (AP) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.51206
- Average Precision  (AP) @[ IoU=0.50      | area=   all | maxDets=100 ] = 0.69730
- Average Precision  (AP) @[ IoU=0.75      | area=   all | maxDets=100 ] = 0.55521
- Average Precision  (AP) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.35247
- Average Precision  (AP) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.55937
- Average Precision  (AP) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.66693
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=  1 ] = 0.38453
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets= 10 ] = 0.63765
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.68772
- Average Recall     (AR) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.53766
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.73549
- Average Recall     (AR) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.83868
-```
-
-To measure accuracy, download [COCO-annotations for Pycocotools](http://images.cocodataset.org/annotations/annotations_trainval2017.zip) to the `./coco/annotations/instances_val2017.json`
+The following instructions guide you through training the adapted model and running inference on images and video.
 
 ## Training
-
-Data preparation
-
-``` shell
-bash scripts/get_coco.sh
-```
-
-* Download MS COCO dataset images ([train](http://images.cocodataset.org/zips/train2017.zip), [val](http://images.cocodataset.org/zips/val2017.zip), [test](http://images.cocodataset.org/zips/test2017.zip)) and [labels](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/coco2017labels-segments.zip). If you have previously used a different version of YOLO, we strongly recommend that you delete `train2017.cache` and `val2017.cache` files, and redownload [labels](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/coco2017labels-segments.zip) 
-
 Single GPU training
+``` shell
+python YOLOv7-DL23/train.py --workers 8 --device 0 --batch-size 4 --data 'path/to/data.yaml' --img 1024 1024 --cfg YOLOv7-DL23/cfg/training/yolov7_custom.yaml --weights 'YOLOv7-DL23/init_weights.pt' --name yolov7_dist_v1 --hyp YOLOv7-DL23/data/hyp.scratch.p5.yaml
+```
+Replace 'path/to/data.yaml' with the path to the yaml file contained in the dataset folder from the challenge website.
+Note that a customised hyperparameter file is used where distance scaling method and max distance are defined.
+
+Multi GPU training
+``` shell
+python -m torch.distributed.launch --nproc_per_node 4 --master_port 9527 YOLOv7-DL23/train.py --workers 8 --device 0,1,2,3 --sync-bn --batch-size 16 --data 'path/to/data.yaml' --img 1024 1024 --cfg YOLOv7-DL23/cfg/training/yolov7_custom.yaml --weights 'YOLOv7-DL23/init_weights.pt' --name yolov7_dist_v1 --hyp YOLOv7-DL23/data/hyp.scratch.p5.yaml
+```
+You may have to replace the --local-rank argument in the train.py script with --local_rank depending on your CUDA version.
+
+<br/>
+
+The *results.txt* file has the following format:
+```
+Epoch  GPUMem  train_box  train_obj  train_cls  train_dist  total  labels  img_size  precision  recall  map0.5  map.5:.95  val_box  val_obj  val_cls  val_dist
+```
+The generated *results.png* file displays box, objectness and distance loss on the train and validatin set.
+
+## Testing
+> [!NOTE]
+> :pushpin: Pretrained Weights are available [here](https://drive.google.com/drive/folders/1GujICE9Ev-ppfH4PUX19UjywqgFn-5Zf?hl=de) 
+
+Using the pretrained model, you can evaluate its performance w.r.t. object detection and distance estimation:
 
 ``` shell
-# train p5 models
-python train.py --workers 8 --device 0 --batch-size 32 --data data/coco.yaml --img 640 640 --cfg cfg/training/yolov7.yaml --weights '' --name yolov7 --hyp data/hyp.scratch.p5.yaml
-
-# train p6 models
-python train_aux.py --workers 8 --device 0 --batch-size 16 --data data/coco.yaml --img 1280 1280 --cfg cfg/training/yolov7-w6.yaml --weights '' --name yolov7-w6 --hyp data/hyp.scratch.p6.yaml
+python YOLOv7-DL23/test.py --data 'path/to/data.yaml' --img 1024 --batch 4 --conf 0.001 --iou 0.65 --device 0 --weights 'YOLOv7-DL23/init_weights.pt' --name yolov7_DistV1_test --task 'test' --hyp 'YOLOv7-DL23/data/hyp.scratch.p5.yaml'
 ```
+Make sure that the data.yaml file contains a test or val entity depending on the task argument.
 
-Multiple GPU training
 
-``` shell
-# train p5 models
-python -m torch.distributed.launch --nproc_per_node 4 --master_port 9527 train.py --workers 8 --device 0,1,2,3 --sync-bn --batch-size 128 --data data/coco.yaml --img 640 640 --cfg cfg/training/yolov7.yaml --weights '' --name yolov7 --hyp data/hyp.scratch.p5.yaml
+Sample output for a model with pretrained weights on testsplit:
 
-# train p6 models
-python -m torch.distributed.launch --nproc_per_node 8 --master_port 9527 train_aux.py --workers 8 --device 0,1,2,3,4,5,6,7 --sync-bn --batch-size 128 --data data/coco.yaml --img 1280 1280 --cfg cfg/training/yolov7-w6.yaml --weights '' --name yolov7-w6 --hyp data/hyp.scratch.p6.yaml
 ```
+Distance bin (0.0, 200.0):
+  samples:  877
+  weighted_reL_dist_err_buoy = 0.19412737838630373
+  abs_mean_dist_err_buoy = 25.058669469783354
+Distance bin (200.0, 400.0):
+  samples:  812
+  weighted_reL_dist_err_buoy = 0.2057969997856522
+  abs_mean_dist_err_buoy = 64.8434421182266
+Distance bin (400.0, 600.0):
+  samples:  790
+  weighted_reL_dist_err_buoy = 0.1542782489203172
+  abs_mean_dist_err_buoy = 70.57278481012658
+Distance bin (600.0, 800.0):
+  samples:  350
+  weighted_reL_dist_err_buoy = 0.13248381672101447
+  abs_mean_dist_err_buoy = 107.10892857142858
+Distance bin (800.0, 1000.0):
+  samples:  69
+  weighted_reL_dist_err_buoy = 0.1258767028866825
+  abs_mean_dist_err_buoy = 110.01449275362319
+Total Samples:  2907
+Overall weighted_rel_dist_err_buoy = 0.18248750203805492
+Overall abs_mean_dist_err_buoy = 60.99138394392845
+Combined Metric =  0.22202799959332511
 
-## Transfer learning
-
-[`yolov7_training.pt`](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7_training.pt) [`yolov7x_training.pt`](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7x_training.pt) [`yolov7-w6_training.pt`](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-w6_training.pt) [`yolov7-e6_training.pt`](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-e6_training.pt) [`yolov7-d6_training.pt`](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-d6_training.pt) [`yolov7-e6e_training.pt`](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-e6e_training.pt)
-
-Single GPU finetuning for custom dataset
-
-``` shell
-# finetune p5 models
-python train.py --workers 8 --device 0 --batch-size 32 --data data/custom.yaml --img 640 640 --cfg cfg/training/yolov7-custom.yaml --weights 'yolov7_training.pt' --name yolov7-custom --hyp data/hyp.scratch.custom.yaml
-
-# finetune p6 models
-python train_aux.py --workers 8 --device 0 --batch-size 16 --data data/custom.yaml --img 1280 1280 --cfg cfg/training/yolov7-w6-custom.yaml --weights 'yolov7-w6_training.pt' --name yolov7-w6-custom --hyp data/hyp.scratch.custom.yaml
+                Class      Images      Labels        P           R         mAP@.5    mAP@.5:.95:
+                 all        2268        3439       0.773       0.639       0.669       0.272
 ```
+The Distance Error is computed for 5 distance bins. The interval size of a bin depends on the max dist hyperparameter passed to the testscript in hyp.scratch-p5.yaml.
 
-## Re-parameterization
-
-See [reparameterization.ipynb](tools/reparameterization.ipynb)
+Furthermore the default YOLOv7 statistict for Object Detection are displayed.
 
 ## Inference
 
-On video:
+Use the detect script to run inference on video:
 ``` shell
-python detect.py --weights yolov7.pt --conf 0.25 --img-size 640 --source yourvideo.mp4
+python YOLOv7-DL23/detect.py --weights 'YOLOv7-DL23/init_weights.pt' --conf 0.25 --img-size 1024 --source '/path/to/video.avi'
 ```
 
-On image:
-``` shell
-python detect.py --weights yolov7.pt --conf 0.25 --img-size 640 --source inference/images/horses.jpg
-```
+![](https://github.com/Ben93kie/YOLOv7-DL23/blob/distance_network/assets/detect.gif)
 
-<div align="center">
-    <a href="./">
-        <img src="./figure/horses_prediction.jpg" width="59%"/>
-    </a>
-</div>
-
+The first number is the confidence value, the second number the metric distance estimate in meters.
 
 ## Export
 
-**Pytorch to CoreML (and inference on MacOS/iOS)** <a href="https://colab.research.google.com/github/WongKinYiu/yolov7/blob/main/tools/YOLOv7CoreML.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"></a>
+You need to export your model to ONNX to be evaluated on the
+server for getting displayed on the [leaderboard](https://macvi.org/leaderboard/surface/distEstimation/distance-estimation).
 
-**Pytorch to ONNX with NMS (and inference)** <a href="https://colab.research.google.com/github/WongKinYiu/yolov7/blob/main/tools/YOLOv7onnx.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"></a>
-```shell
-python export.py --weights yolov7-tiny.pt --grid --end2end --simplify \
-        --topk-all 100 --iou-thres 0.65 --conf-thres 0.35 --img-size 640 640 --max-wh 640
+To export the model provided in this repo, run:
+``` shell
+python YOLOv7-DL23/export_yoloV7_withdistances.py --weights 'YOLOv7-DL23/init_weights.pt' --size 1024 1024
 ```
+This will create an .onnx file and a labels.txt file. The exported model in ONNX format can be uploaded to the [testserver](https://macvi.org/upload?track=Distance+Estimation).
+Be aware that you might need to make adjustments to the export script depending on the adaptions you make to the model architecture.
 
-**Pytorch to TensorRT with NMS (and inference)** <a href="https://colab.research.google.com/github/WongKinYiu/yolov7/blob/main/tools/YOLOv7trt.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"></a>
+> [!NOTE]
+> Model submission requirements:
+> - Model Parameters not exceeding 50 million
+> - Exported for image size of 1024x1024
+> - NMS not included
+> - Output tensor Format: [batch_sz, num_anchors, [xyhw,objectness,class,dist]]
 
-```shell
-wget https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-tiny.pt
-python export.py --weights ./yolov7-tiny.pt --grid --end2end --simplify --topk-all 100 --iou-thres 0.65 --conf-thres 0.35 --img-size 640 640
-git clone https://github.com/Linaom1214/tensorrt-python.git
-python ./tensorrt-python/export.py -o yolov7-tiny.onnx -e yolov7-tiny-nms.trt -p fp16
+To test whether your exported ONNX model meets the specifications you can run:
+``` shell
+python YOLOv7-DL23/testscript_onnx.py --weights 'YOLOv7-DL23/model.onnx' --data 'path/to/data.yaml'
 ```
+The script is similar to the test.py file but uses the ONNX model instead of relying on the pytorch framework. An almost identical script is used on the testserver.
+## Dataset
+The [Dataset](https://drive.google.com/drive/folders/1M-K03ELa1Lf8Ob-sVJFEFMBrpQMS0210?hl=de) contains around 3000 images of maritime navigational aids (mostly red/green buoy markers). You are only provided with a training set. 
+The testset is withheld to create a benchmark for all submitted models during the competition.
 
-**Pytorch to TensorRT another way** <a href="https://colab.research.google.com/gist/AlexeyAB/fcb47ae544cf284eb24d8ad8e880d45c/yolov7trtlinaom.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"></a> <details><summary> <b>Expand</b> </summary>
+We provide a reliable distance ground truth value by computing the haversine distance between the cameras GPS position for each frame and mapped navigational buoys.
+As you might notice when inspecting some of the images we decided to also include samples where the distance to the object is significantly large and the object only 
+consist of a few pixels in the video feed. This might push the boundaries of the object detector, hence decreasing the mAP metric. Since the evaluation metric of the challenge also includes
+object detection critera (e.g. mAP) you can feel free to remove samples from the training data where this might be the case.
+
+Examples containing the most common buoy types:
+<p float="left">
+  <img src="https://github.com/Ben93kie/YOLOv7-DL23/blob/distance_network/assets/Figure_1.png" width="400" />
+  <img src="https://github.com/Ben93kie/YOLOv7-DL23/blob/distance_network/assets/Figure_2.png" width="400" /> 
+</p>
 
 
-```shell
-wget https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-tiny.pt
-python export.py --weights yolov7-tiny.pt --grid --include-nms
-git clone https://github.com/Linaom1214/tensorrt-python.git
-python ./tensorrt-python/export.py -o yolov7-tiny.onnx -e yolov7-tiny-nms.trt -p fp16
-
-# Or use trtexec to convert ONNX to TensorRT engine
-/usr/src/tensorrt/bin/trtexec --onnx=yolov7-tiny.onnx --saveEngine=yolov7-tiny-nms.trt --fp16
+The dataset follows the YOLO format convention, where images and labels are located in separate folders and each image is linked to a corresponding labels (.txt) file.
+Each line in the textfile represents a bounding box:
+```text
+class-id  center-X  center-Y  width  height  distance
 ```
+The Bounding Box coordinates and dimensions are normalized. The distance on the other hand is provided as a metric value in meters!
 
-</details>
+## Evaluation
+The submitted models are evaluated on the test split of the dataset. The test set is not publically available.
 
-Tested with: Python 3.7.13, Pytorch 1.12.0+cu113
+Given that the challenge seeks to address both monocular distance estimation and object detection, two performance metrics are utilized. 
+The quality of object detection task for the submitted models is assessed using the mAP@[.5:.95] metric.
+The distance error is defined as follows:
 
-## Pose estimation
+$$\epsilon_{Dist} = \sum_{i=1}^{n} \frac{c_i}{\sum_{j=1}^{n} c_j} \frac{|d_i - \hat{d}_i|}{d_i}$$
 
-[`code`](https://github.com/WongKinYiu/yolov7/tree/pose) [`yolov7-w6-pose.pt`](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-w6-pose.pt)
+where $i$ is the index of the test sample, $n$ is the cardinality of the test set, $c_i$ the confidence of the prediction 
+(objectness * class probability $\rightarrow$ since we only have one class, this is equal to objectness), $d_i$ the ground 
+truth distance and $\hat{d}_i$ the predicted distance.
+Since predictions for distant objects naturally have higher deviations, we employ a relative measure to also penalize smaller absolute errors for close objects. 
 
-See [keypoint.ipynb](https://github.com/WongKinYiu/yolov7/blob/main/tools/keypoint.ipynb).
+To produce a final score for the submitted models, which takes the object detection performance and the distance error into account, the combined metric is specified as:
 
-<div align="center">
-    <a href="./">
-        <img src="./figure/pose.png" width="39%"/>
-    </a>
-</div>
+$$\text{Combined Metric} = \text{mAP@[0.5:0.95]} \cdot (1 - \min(\epsilon_{Dist}, 1))$$
 
-
-## Instance segmentation (with NTU)
-
-[`code`](https://github.com/WongKinYiu/yolov7/tree/mask) [`yolov7-mask.pt`](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-mask.pt)
-
-See [instance.ipynb](https://github.com/WongKinYiu/yolov7/blob/main/tools/instance.ipynb).
-
-<div align="center">
-    <a href="./">
-        <img src="./figure/mask.png" width="59%"/>
-    </a>
-</div>
-
-## Instance segmentation
-
-[`code`](https://github.com/WongKinYiu/yolov7/tree/u7/seg) [`yolov7-seg.pt`](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-seg.pt)
-
-YOLOv7 for instance segmentation (YOLOR + YOLOv5 + YOLACT)
-
-| Model | Test Size | AP<sup>box</sup> | AP<sub>50</sub><sup>box</sup> | AP<sub>75</sub><sup>box</sup> | AP<sup>mask</sup> | AP<sub>50</sub><sup>mask</sup> | AP<sub>75</sub><sup>mask</sup> |
-| :-- | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
-| **YOLOv7-seg** | 640 | **51.4%** | **69.4%** | **55.8%** | **41.5%** | **65.5%** | **43.7%** |
-
-## Anchor free detection head
-
-[`code`](https://github.com/WongKinYiu/yolov7/tree/u6) [`yolov7-u6.pt`](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-u6.pt)
-
-YOLOv7 with decoupled TAL head (YOLOR + YOLOv5 + YOLOv6)
-
-| Model | Test Size | AP<sup>val</sup> | AP<sub>50</sub><sup>val</sup> | AP<sub>75</sub><sup>val</sup> |
-| :-- | :-: | :-: | :-: | :-: |
-| **YOLOv7-u6** | 640 | **52.6%** | **69.7%** | **57.3%** |
-
-
-## Citation
-
-```
-@inproceedings{wang2023yolov7,
-  title={{YOLOv7}: Trainable bag-of-freebies sets new state-of-the-art for real-time object detectors},
-  author={Wang, Chien-Yao and Bochkovskiy, Alexey and Liao, Hong-Yuan Mark},
-  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
-  year={2023}
-}
-```
-
-```
-@article{wang2023designing,
-  title={Designing Network Design Strategies Through Gradient Path Analysis},
-  author={Wang, Chien-Yao and Liao, Hong-Yuan Mark and Yeh, I-Hau},
-  journal={Journal of Information Science and Engineering},
-  year={2023}
-}
-```
-
-
-## Teaser
-
-YOLOv7-semantic & YOLOv7-panoptic & YOLOv7-caption
-
-<div align="center">
-    <a href="./">
-        <img src="./figure/tennis.jpg" width="24%"/>
-    </a>
-    <a href="./">
-        <img src="./figure/tennis_semantic.jpg" width="24%"/>
-    </a>
-    <a href="./">
-        <img src="./figure/tennis_panoptic.png" width="24%"/>
-    </a>
-    <a href="./">
-        <img src="./figure/tennis_caption.png" width="24%"/>
-    </a>
-</div>
-
-YOLOv7-semantic & YOLOv7-detection & YOLOv7-depth (with NTUT)
-
-<div align="center">
-    <a href="./">
-        <img src="./figure/yolov7_city.jpg" width="80%"/>
-    </a>
-</div>
-
-YOLOv7-3d-detection & YOLOv7-lidar & YOLOv7-road (with NTUT)
-
-<div align="center">
-    <a href="./">
-        <img src="./figure/yolov7_3d.jpg" width="30%"/>
-    </a>
-    <a href="./">
-        <img src="./figure/yolov7_lidar.jpg" width="30%"/>
-    </a>
-    <a href="./">
-        <img src="./figure/yolov7_road.jpg" width="30%"/>
-    </a>
-</div>
-
-
-## Acknowledgements
-
-<details><summary> <b>Expand</b> </summary>
-
-* [https://github.com/AlexeyAB/darknet](https://github.com/AlexeyAB/darknet)
-* [https://github.com/WongKinYiu/yolor](https://github.com/WongKinYiu/yolor)
-* [https://github.com/WongKinYiu/PyTorch_YOLOv4](https://github.com/WongKinYiu/PyTorch_YOLOv4)
-* [https://github.com/WongKinYiu/ScaledYOLOv4](https://github.com/WongKinYiu/ScaledYOLOv4)
-* [https://github.com/Megvii-BaseDetection/YOLOX](https://github.com/Megvii-BaseDetection/YOLOX)
-* [https://github.com/ultralytics/yolov3](https://github.com/ultralytics/yolov3)
-* [https://github.com/ultralytics/yolov5](https://github.com/ultralytics/yolov5)
-* [https://github.com/DingXiaoH/RepVGG](https://github.com/DingXiaoH/RepVGG)
-* [https://github.com/JUGGHM/OREPA_CVPR2022](https://github.com/JUGGHM/OREPA_CVPR2022)
-* [https://github.com/TexasInstruments/edgeai-yolov5/tree/yolo-pose](https://github.com/TexasInstruments/edgeai-yolov5/tree/yolo-pose)
-
-</details>
+The final rankings of the challenge are based on this score.

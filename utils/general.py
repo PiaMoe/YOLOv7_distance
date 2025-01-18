@@ -626,7 +626,7 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
     merge = False  # use merge-NMS
 
     t = time.time()
-    output = [torch.zeros((0, 8), device=prediction.device)] * prediction.shape[0]
+    output = [torch.zeros((0, 7), device=prediction.device)] * prediction.shape[0]
     for xi, x in enumerate(prediction):  # image index, image inference
         # Apply constraints
         # x[((x[..., 2:4] < min_wh) | (x[..., 2:4] > max_wh)).any(1), 4] = 0  # width-height
@@ -647,7 +647,7 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
 
         # Compute conf
         if nc == 1:
-            x[:, 5:] = x[:, 4:5] # for models with one class, cls_loss is 0 and cls_conf is always 0.5,
+            x[:, 5:-1] = x[:, 4:5] # for models with one class, cls_loss is 0 and cls_conf is always 0.5,
                                  # so there is no need to multiplicate.
         else:
             x[:, 5:-1] *= x[:, 4:5]  # conf = obj_conf * cls_conf

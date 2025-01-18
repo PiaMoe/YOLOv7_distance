@@ -80,7 +80,9 @@ class Detect(nn.Module):
                     xy, wh, conf, dist = y.split((2, 2, self.nc + 1, 1), 4)  # y.tensor_split((2, 4, 5), 4)  # torch 1.8.0
                     xy = xy * (2. * self.stride[i]) + (self.stride[i] * (self.grid[i] - 0.5))  # new xy
                     wh = wh ** 2 * (4 * self.anchor_grid[i].data)  # new wh
-                    dist = dist * self.max_distance
+
+                    dist = dist * self.max_distance     # at the moment we only support Linear normalization for ONNX exports in Detect -> Use IDetect instead
+
                     y = torch.cat((xy, wh, conf, dist), 4)
                 z.append(y.view(bs, -1, self.no))
 
@@ -123,8 +125,17 @@ class IDetect(nn.Module):
     include_nms = False
     concat = False
 
-    def __init__(self, nc=80, anchors=(), ch=()):  # detection layer
+    def __init__(self, nc=80, anchors=(), ch=(), hyp=None):  # detection layer
         super(IDetect, self).__init__()
+        if hyp is not None:
+            self.normalization_strategy = hyp["normalization_strategy"]
+            self.max_distance = hyp["max_distance"]
+        else:
+            print("!!!Careful, no hyperparameters passed")
+            print("!!!Using default norm strat & max dist in IDetect Module")
+            self.normalization_strategy = "linear"
+            self.max_distance = 1000
+
         self.nc = nc  # number of classes
         self.no = nc + 5 + 1 # number of outputs per anchor +1 for distance
         self.nl = len(anchors)  # number of detection layers
@@ -155,13 +166,27 @@ class IDetect(nn.Module):
                 y = x[i].sigmoid()
                 y[..., 0:2] = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy
                 y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
-                # distance_pred = y[..., -1] * np.log(1000)# distances
-                distance_pred = y[..., -1] * 1000# distances
-                # distance_pred = torch.exp(distance_pred)-1
-                y = torch.cat((y[..., :-1], distance_pred.unsqueeze(-1)), dim=-1)
+                y[..., -1] = self.rescale_dist(y[..., -1])  # rescale dist based on norm strategy
                 z.append(y.view(bs, -1, self.no))
 
         return x if self.training else (torch.cat(z, 1), x)
+
+    def rescale_dist(self, dist_pred_normalized):
+        if self.normalization_strategy == "log":
+            rescaled_dist = (dist_pred_normalized ) * np.log(self.max_distance)
+            rescaled_dist = torch.exp(rescaled_dist) - 1
+        elif self.normalization_strategy == "log_negative":
+            rescaled_dist = (dist_pred_normalized + 0.5) * np.log(self.max_distance)
+            rescaled_dist = torch.exp(y[..., -1]) - 1
+        elif self.normalization_strategy == "linear":
+            rescaled_dist = (dist_pred_normalized) * self.max_distance
+        elif self.normalization_strategy == "linear_negative":
+            rescaled_dist = (dist_pred_normalized + 0.5) * self.max_distance
+        else:
+            raise ValueError("no normalization strategy defined")
+        rescaled_dist = torch.clip(rescaled_dist, 0, self.max_distance)
+
+        return rescaled_dist
 
     def fuseforward(self, x):
         # x = x.copy()  # for profiling
@@ -180,11 +205,13 @@ class IDetect(nn.Module):
                 if not torch.onnx.is_in_onnx_export():
                     y[..., 0:2] = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy
                     y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
+                    y[..., -1] = self.rescale_dist(y[..., -1])  # rescale dist based on norm strategy
                 else:
-                    xy, wh, conf = y.split((2, 2, self.nc + 1), 4)  # y.tensor_split((2, 4, 5), 4)  # torch 1.8.0
+                    xy, wh, conf, dist = y.split((2, 2, self.nc + 1, 1), 4)  # y.tensor_split((2, 4, 5), 4)  # torch 1.8.0
                     xy = xy * (2. * self.stride[i]) + (self.stride[i] * (self.grid[i] - 0.5))  # new xy
                     wh = wh ** 2 * (4 * self.anchor_grid[i].data)  # new wh
-                    y = torch.cat((xy, wh, conf), 4)
+                    dist = self.rescale_dist(dist)
+                    y = torch.cat((xy, wh, conf, dist), 4)
                 z.append(y.view(bs, -1, self.no))
 
         if self.training:
@@ -202,7 +229,6 @@ class IDetect(nn.Module):
         return out
 
     def fuse(self):
-        print("IDetect.fuse")
         # fuse ImplicitA and Convolution
         for i in range(len(self.m)):
             c1,c2,_,_ = self.m[i].weight.shape
@@ -224,13 +250,14 @@ class IDetect(nn.Module):
         z = torch.cat(z, 1)
         box = z[:, :, :4]
         conf = z[:, :, 4:5]
-        score = z[:, :, 5:]
+        score = z[:, :, 5:-1]
+        dist = z[:, :, -1]
         score *= conf
         convert_matrix = torch.tensor([[1, 0, 1, 0], [0, 1, 0, 1], [-0.5, 0, 0.5, 0], [0, -0.5, 0, 0.5]],
                                            dtype=torch.float32,
                                            device=z.device)
         box @= convert_matrix
-        return (box, score)
+        return (box, score, dist)
 
 
 class IKeypoint(nn.Module):
@@ -763,7 +790,7 @@ def parse_model(d, ch, hyp=None):  # model_dict, input_channels(3)
     logger.info('\n%3s%18s%3s%10s  %-40s%-30s' % ('', 'from', 'n', 'params', 'module', 'arguments'))
     anchors, nc, gd, gw = d['anchors'], d['nc'], d['depth_multiple'], d['width_multiple']
     na = (len(anchors[0]) // 2) if isinstance(anchors, list) else anchors  # number of anchors
-    no = na * (nc + 5)  # number of outputs = anchors * (classes + 5)
+    no = na * (nc + 5)  # number of outputs = anchors * (classes + 5 + 1)
 
     layers, save, c2 = [], [], ch[-1]  # layers, savelist, ch out
     for i, (f, n, m, args) in enumerate(d['backbone'] + d['head']):  # from, number, module, args
