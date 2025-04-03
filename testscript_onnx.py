@@ -109,7 +109,7 @@ def test(data,
     seen = 0
     confusion_matrix = ConfusionMatrix(nc=nc)
     coco91class = coco80_to_coco91_class()
-    names = {0: "nav_buoy"}
+    names = {0: "boat"}
     s = ('%20s' + '%12s' * 6) % ('Class', 'Images', 'Labels', 'P', 'R', 'mAP@.5', 'mAP@.5:.95')
     p, r, f1, mp, mr, map50, map, t0, t1 = 0., 0., 0., 0., 0., 0., 0., 0., 0.
     jdict, stats, ap, ap_class, wandb_images = [], [], [], [], []
@@ -282,78 +282,78 @@ def test(data,
 
 
     # Initialize dictionaries to store accumulated weighted errors and total confidences
-    mean_dist_err_buoy_bins = defaultdict(float)
-    abs_dist_err_buoy_bins = defaultdict(float)
-    total_conf_buoy_bins = defaultdict(float)
+    mean_dist_err_boat_bins = defaultdict(float)
+    abs_dist_err_boat_bins = defaultdict(float)
+    total_conf_boat_bins = defaultdict(float)
     samples_per_bin = defaultdict(int)
 
     # Initialize variables to store total accumulated weighted errors and confidences
-    total_mean_dist_err_buoy= 0 # weighted with conf & relative
-    abs_dist_err_buoy = 0 # absolute dist error without conf weights
-    total_conf_buoy = 0
+    total_mean_dist_err_boat= 0 # weighted with conf & relative
+    abs_dist_err_boat = 0 # absolute dist error without conf weights
+    total_conf_boat = 0
     samples = 0
     # print(distance_errors)
     for distance_err in distance_errors:
         if 0 in distance_err.keys():
             for obj_disst_pair in distance_err[0]:
                 dconf, derror, gt, pred = obj_disst_pair
-                total_mean_dist_err_buoy += dconf * derror / gt
-                abs_dist_err_buoy += derror
-                total_conf_buoy += dconf
+                total_mean_dist_err_boat += dconf * derror / gt
+                abs_dist_err_boat += derror
+                total_conf_boat += dconf
                 samples += 1
                 for bin_min, bin_max in distance_bins:
                     if bin_min <= gt < bin_max:
                         bin_key = (bin_min, bin_max)
-                        mean_dist_err_buoy_bins[bin_key] += dconf * derror / gt
-                        abs_dist_err_buoy_bins[bin_key] += derror
-                        total_conf_buoy_bins[bin_key] += dconf
+                        mean_dist_err_boat_bins[bin_key] += dconf * derror / gt
+                        abs_dist_err_boat_bins[bin_key] += derror
+                        total_conf_boat_bins[bin_key] += dconf
                         samples_per_bin[bin_key] +=1
                         break
 
     # Calculate the weighted mean distance error for each bin
-    weighted_mean_dist_err_buoy_bins = {
-        bin_key: mean_dist_err_buoy_bins[bin_key] / total_conf_buoy_bins[bin_key]
-        if total_conf_buoy_bins[bin_key] > 0 else -1
+    weighted_mean_dist_err_boat_bins = {
+        bin_key: mean_dist_err_boat_bins[bin_key] / total_conf_boat_bins[bin_key]
+        if total_conf_boat_bins[bin_key] > 0 else -1
         for bin_key in distance_bins
     }
 
     # Compute mean of absolute dist error bins
-    mean_abs_dist_err_buoy_bins = {
-        bin_key: abs_dist_err_buoy_bins[bin_key] / samples_per_bin[bin_key]
+    mean_abs_dist_err_boat_bins = {
+        bin_key: abs_dist_err_boat_bins[bin_key] / samples_per_bin[bin_key]
         if samples_per_bin[bin_key] > 0 else -1
         for bin_key in distance_bins
     }
     
-    mean_abs_dist_err_buoy = abs_dist_err_buoy / samples
+    mean_abs_dist_err_boat = abs_dist_err_boat / samples
 
 
     # Calculate the overall weighted mean distance error
-    overall_weighted_mean_dist_err_buoy = total_mean_dist_err_buoy / total_conf_buoy if total_conf_buoy > 0 else -1
+    overall_weighted_mean_dist_err_boat = total_mean_dist_err_boat / total_conf_boat if total_conf_boat > 0 else -1
     metrics_bin_distances = {}
 
     # compute combined metric between mAP@0.5:0.95 and err_weighted_dist_rel+
-    combined_metric = map * (1 - min(overall_weighted_mean_dist_err_buoy, 1))
+    combined_metric = map * (1 - min(overall_weighted_mean_dist_err_boat, 1))
 
     # Print the results for each bin
     for bin_key in distance_bins:
         print(f"Distance bin {bin_key}:")
         print("  samples: ", samples_per_bin[bin_key])
-        print("  weighted_reL_dist_err_buoy =", weighted_mean_dist_err_buoy_bins[bin_key])
-        print("  abs_mean_dist_err_buoy =", mean_abs_dist_err_buoy_bins[bin_key])
-        metrics_bin_distances["metrics/distancebins/weighted_rel_dist_err_buoy_"+str(bin_key)] = weighted_mean_dist_err_buoy_bins[bin_key]
-        metrics_bin_distances["metrics/distancebins/abs_mean_dist_err_buoy_"+str(bin_key)] = mean_abs_dist_err_buoy_bins[bin_key]
+        print("  weighted_reL_dist_err_boat =", weighted_mean_dist_err_boat_bins[bin_key])
+        print("  abs_mean_dist_err_boat =", mean_abs_dist_err_boat_bins[bin_key])
+        metrics_bin_distances["metrics/distancebins/weighted_rel_dist_err_boat_"+str(bin_key)] = weighted_mean_dist_err_boat_bins[bin_key]
+        metrics_bin_distances["metrics/distancebins/abs_mean_dist_err_boat_"+str(bin_key)] = mean_abs_dist_err_boat_bins[bin_key]
     if not wandb_logger is None:
         wandb_logger.log(metrics_bin_distances)
     # Print the overall results
     print("Total Samples: ", samples)
-    print("Overall weighted_rel_dist_err_buoy =", overall_weighted_mean_dist_err_buoy)
-    print("Overall abs_mean_dist_err_buoy =", mean_abs_dist_err_buoy)
+    print("Overall weighted_rel_dist_err_boat =", overall_weighted_mean_dist_err_boat)
+    print("Overall abs_mean_dist_err_boat =", mean_abs_dist_err_boat)
     print("Combined Metric = ", combined_metric)
 
 
     metrics_overall_distance = {}
-    metrics_overall_distance["metrics/weighted_rel_dist_err_buoy"] = overall_weighted_mean_dist_err_buoy
-    metrics_overall_distance["metrics/abs_mean_dist_err_buoy"] = mean_abs_dist_err_buoy
+    metrics_overall_distance["metrics/weighted_rel_dist_err_boat"] = overall_weighted_mean_dist_err_boat
+    metrics_overall_distance["metrics/abs_mean_dist_err_boat"] = mean_abs_dist_err_boat
     metrics_overall_distance["metrics/combined_metric"] = combined_metric 
     if not wandb_logger is None:
         wandb_logger.log(metrics_overall_distance)
