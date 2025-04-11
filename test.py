@@ -300,26 +300,11 @@ def test(data,
     else:
         distance_bins = create_distance_bins(1000, 10)   # use default dist of 1000 m if no hyperparameters passed
 
-    # print(distance_bins)
-    # distance_bins = [(0, 50), (50, 100), (100, 150), (200, 250), (250, 300), (300, 500), (500, 700), (700, 1000)]
     if len(stats) and stats[0].any():
         p, r, ap, f1, ap_class = ap_per_class(*stats, plot=plots, v5_metric=v5_metric, save_dir=save_dir, names=names)
         ap50, ap = ap[:, 0], ap.mean(1)  # AP@0.5, AP@0.5:0.95
         mp, mr, map50, map = p.mean(), r.mean(), ap50.mean(), ap.mean()
         nt = np.bincount(stats[3].astype(np.int64), minlength=nc)  # number of targets per class
-
-        #do it for individual distances as well:
-        # stats_for_bins = {}
-        # for bin_min, bin_max in distance_bins:
-        #     #stats[-1] should be target distances
-        #     boolean_array = (stats[-1] >= bin_min) & (stats[-1] < bin_max)
-        #     bin_key = (bin_min, bin_max)
-        #     for k, nparray in enumerate(stats):
-        #         print(k, nparray)
-        #         p_d, r_d, ap_d, f1_d, ap_class_d = ap_per_class(nparray[boolean_array])
-        #     stats_for_bins[bin_key] = [p_d, r_d, ap_d, f1_d, ap_class_d]
-        #     print(bin_key, stats_for_bins[bin_key])
-
     else:
         nt = torch.zeros(1)
 
@@ -472,7 +457,9 @@ def test(data,
     maps = np.zeros(nc) + map
     for i, c in enumerate(ap_class):
         maps[c] = ap[i]
-    return (mp, mr, map50, map, *(loss.cpu() / len(dataloader)).tolist()), maps, t
+
+    return (mp, mr, map50, map,  1 - min(overall_weighted_mean_dist_err_boat, 1), combined_metric,
+            *(loss.cpu() / len(dataloader)).tolist()), maps, t
 
 
 if __name__ == '__main__':
