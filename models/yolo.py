@@ -28,11 +28,11 @@ class Detect(nn.Module):
     concat = False
     def __init__(self, nc=80, anchors=(), ch=(), hyp=None):  # detection layer
         super(Detect, self).__init__()
-        # self.hyp = hyp
         self.normalization_strategy = hyp["normalization_strategy"]
         self.max_distance = hyp["max_distance"]
+        self.max_head_deg = 360
         self.nc = nc  # number of classes
-        self.no = nc + 5 + 1 # number of outputs per anchor
+        self.no = nc + 5 + 1 + 1 # number of outputs per anchor + 1 for distance + 1 for heading
         self.nl = len(anchors)  # number of detection layers
         self.na = len(anchors[0]) // 2  # number of anchors
         self.grid = [torch.zeros(1)] * self.nl  # init grid
@@ -57,33 +57,36 @@ class Detect(nn.Module):
                 # y[..., :-1] = y[..., :-1].sigmoid()
                 #experimentally, set everything to sigmoid, even distances..
                 y = y.sigmoid()
-
                 # y = x[i].sigmoid()
+
+
                 if not torch.onnx.is_in_onnx_export():
                     y[..., 0:2] = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy
                     y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
                     if self.normalization_strategy == "log":
                         # print("taking log strategy")
-                        y[..., -1] = (y[..., -1] ) * np.log(self.max_distance)
-                        y[..., -1] = torch.exp(y[..., -1]) - 1
+                        y[..., -2] = (y[..., -2] ) * np.log(self.max_distance)
+                        y[..., -2] = torch.exp(y[..., -2]) - 1
                     elif self.normalization_strategy == "log_negative":
-                        y[..., -1] = (y[..., -1] + 0.5) * np.log(self.max_distance)
-                        y[..., -1] = torch.exp(y[..., -1]) - 1
+                        y[..., -2] = (y[..., -2] + 0.5) * np.log(self.max_distance)
+                        y[..., -2] = torch.exp(y[..., -2]) - 1
                     elif self.normalization_strategy == "linear":
-                        y[..., -1] = (y[..., -1]) * self.max_distance
+                        y[..., -2] = (y[..., -2]) * self.max_distance
                     elif self.normalization_strategy == "linear_negative":
-                        y[..., -1] = (y[..., -1] + 0.5) * self.max_distance
+                        y[..., -2] = (y[..., -2] + 0.5) * self.max_distance
                     else:
                         raise ValueError("no normalization strategy defined")
-                    y[..., -1] = torch.clip(y[..., -1], 0, self.max_distance)
+                    y[..., -2] = torch.clip(y[..., -2], 0, self.max_distance)
+                    y[..., -1] = torch.clip(y[..., -1], 0, self.max_head_deg)
                 else:
-                    xy, wh, conf, dist = y.split((2, 2, self.nc + 1, 1), 4)  # y.tensor_split((2, 4, 5), 4)  # torch 1.8.0
+                    xy, wh, conf, dist, heading = y.split((2, 2, self.nc + 1 + 1, 1), 4)  # y.tensor_split((2, 4, 5), 4)  # torch 1.8.0
                     xy = xy * (2. * self.stride[i]) + (self.stride[i] * (self.grid[i] - 0.5))  # new xy
                     wh = wh ** 2 * (4 * self.anchor_grid[i].data)  # new wh
 
                     dist = dist * self.max_distance     # at the moment we only support Linear normalization for ONNX exports in Detect -> Use IDetect instead
+                    heading = heading * self.max_head_deg
 
-                    y = torch.cat((xy, wh, conf, dist), 4)
+                    y = torch.cat((xy, wh, conf, dist, heading), 5)
                 z.append(y.view(bs, -1, self.no))
 
         if self.training:
@@ -136,8 +139,9 @@ class IDetect(nn.Module):
             self.normalization_strategy = "linear"
             self.max_distance = 1000
 
+        self.max_head_deg = 360
         self.nc = nc  # number of classes
-        self.no = nc + 5 + 1 # number of outputs per anchor +1 for distance
+        self.no = nc + 5 + 1 + 1 # number of outputs per anchor +1 for distance +1 for heading
         self.nl = len(anchors)  # number of detection layers
         self.na = len(anchors[0]) // 2  # number of anchors
         self.grid = [torch.zeros(1)] * self.nl  # init grid
@@ -166,7 +170,7 @@ class IDetect(nn.Module):
                 y = x[i].sigmoid()
                 y[..., 0:2] = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy
                 y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
-                y[..., -1] = self.rescale_dist(y[..., -1])  # rescale dist based on norm strategy
+                y[..., -2] = self.rescale_dist(y[..., -2])  # rescale dist based on norm strategy
                 z.append(y.view(bs, -1, self.no))
 
         return x if self.training else (torch.cat(z, 1), x)
@@ -177,7 +181,7 @@ class IDetect(nn.Module):
             rescaled_dist = torch.exp(rescaled_dist) - 1
         elif self.normalization_strategy == "log_negative":
             rescaled_dist = (dist_pred_normalized + 0.5) * np.log(self.max_distance)
-            rescaled_dist = torch.exp(y[..., -1]) - 1
+            rescaled_dist = torch.exp(y[..., -2]) - 1
         elif self.normalization_strategy == "linear":
             rescaled_dist = (dist_pred_normalized) * self.max_distance
         elif self.normalization_strategy == "linear_negative":
@@ -187,6 +191,11 @@ class IDetect(nn.Module):
         rescaled_dist = torch.clip(rescaled_dist, 0, self.max_distance)
 
         return rescaled_dist
+
+    def rescale_heading(self, heading_pred_normalized):
+        rescaled_heading = heading_pred_normalized * self.max_head_deg
+        return rescaled_heading
+
 
     def fuseforward(self, x):
         # x = x.copy()  # for profiling
@@ -205,13 +214,15 @@ class IDetect(nn.Module):
                 if not torch.onnx.is_in_onnx_export():
                     y[..., 0:2] = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy
                     y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
-                    y[..., -1] = self.rescale_dist(y[..., -1])  # rescale dist based on norm strategy
+                    y[..., -2] = self.rescale_dist(y[..., -2])  # rescale dist based on norm strategy
+                    y[..., -1] = self.rescale_heading(y[..., -1])
                 else:
-                    xy, wh, conf, dist = y.split((2, 2, self.nc + 1, 1), 4)  # y.tensor_split((2, 4, 5), 4)  # torch 1.8.0
+                    xy, wh, conf, dist, heading = y.split((2, 2, self.nc + 1 + 1, 1), 4)  # y.tensor_split((2, 4, 5), 4)  # torch 1.8.0
                     xy = xy * (2. * self.stride[i]) + (self.stride[i] * (self.grid[i] - 0.5))  # new xy
                     wh = wh ** 2 * (4 * self.anchor_grid[i].data)  # new wh
                     dist = self.rescale_dist(dist)
-                    y = torch.cat((xy, wh, conf, dist), 4)
+                    heading = self.rescale_heading(heading)
+                    y = torch.cat((xy, wh, conf, dist, heading), 5)
                 z.append(y.view(bs, -1, self.no))
 
         if self.training:
@@ -250,14 +261,15 @@ class IDetect(nn.Module):
         z = torch.cat(z, 1)
         box = z[:, :, :4]
         conf = z[:, :, 4:5]
-        score = z[:, :, 5:-1]
-        dist = z[:, :, -1]
+        score = z[:, :, 5:-2]
+        dist = z[:, :, -2]
+        heading = z[:, :, -1]
         score *= conf
         convert_matrix = torch.tensor([[1, 0, 1, 0], [0, 1, 0, 1], [-0.5, 0, 0.5, 0], [0, -0.5, 0, 0.5]],
                                            dtype=torch.float32,
                                            device=z.device)
         box @= convert_matrix
-        return (box, score, dist)
+        return (box, score, dist, heading)
 
 
 class IKeypoint(nn.Module):
