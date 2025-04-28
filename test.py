@@ -132,7 +132,7 @@ def test(data,
     coco91class = coco80_to_coco91_class()
     s = ('%20s' + '%12s' * 6) % ('Class', 'Images', 'Labels', 'P', 'R', 'mAP@.5', 'mAP@.5:.95')
     p, r, f1, mp, mr, map50, map, t0, t1 = 0., 0., 0., 0., 0., 0., 0., 0., 0.
-    loss = torch.zeros(4, device=device)
+    loss = torch.zeros(5, device=device)
     jdict, stats, ap, ap_class, wandb_images = [], [], [], [], []
     distance_errors = []
     dist_errors_plot = []
@@ -180,11 +180,11 @@ def test(data,
                     loss_targets[:, -2] = loss_targets[:, -2] / 1000
 
                 # TODO: heading normalization ?
-
-                loss += ([x.float() for x in train_out], loss_targets)[1][:5]  # box, obj, cls, dist, heading
+                L = compute_loss([x.float() for x in train_out], loss_targets)[1][:5]  # box, obj, cls, dist, heading
+                loss += L
 
             # Run NMS
-            targets[:, 2:-1] *= torch.Tensor([width, height, width, height]).to(device)  # to pixels
+            targets[:, 2:-2] *= torch.Tensor([width, height, width, height]).to(device)  # to pixels
             lb = [targets[targets[:, 0] == i, 1:] for i in range(nb)] if save_hybrid else []  # for autolabelling
             t = time_synchronized()
             out = non_max_suppression(out, conf_thres=conf_thres, iou_thres=iou_thres, labels=lb, multi_label=True)
@@ -210,7 +210,7 @@ def test(data,
 
             # Predictions
             predn = pred.clone()
-            scale_coords(img[si].shape[1:], predn[:, :4], shapes[si][0], shapes[si][1])  # native-space pred
+            scale_coords(img[si].shape[1:], predn[:, :5], shapes[si][0], shapes[si][1])  # native-space pred
 
             # Append to text file
             if save_txt:

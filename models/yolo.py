@@ -193,7 +193,9 @@ class IDetect(nn.Module):
         return rescaled_dist
 
     def rescale_heading(self, heading_pred_normalized):
-        rescaled_heading = heading_pred_normalized * self.max_head_deg
+        # TODO: heading normalization?
+        #rescaled_heading = heading_pred_normalized * self.max_head_deg
+        rescaled_heading = torch.clip(heading_pred_normalized, 0, self.max_head_deg)
         return rescaled_heading
 
 

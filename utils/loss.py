@@ -13,10 +13,11 @@ def smooth_BCE(eps=0.1):  # https://github.com/ultralytics/yolov3/issues/238#iss
     return 1.0 - 0.5 * eps, 0.5 * eps
 
 # TODO: which loss function for heading
-def angular_error(pred_rad, target_rad):
-    pred = torch.rad2deg(pred_rad)
-    target = torch.rad2deg(target_rad)
-    return torch.min(torch.abs(pred - target), 360 - torch.abs(pred - target))
+def angular_error(pred, target):
+    #pred = torch.rad2deg(pred_rad)
+    #target = torch.rad2deg(target_rad)
+    L = torch.min(torch.abs(pred - target), 360 - torch.abs(pred - target))
+    return torch.mean(L)
 
 def cos_error(pred, target):
     return 1 - torch.cos(pred - target)
@@ -506,11 +507,14 @@ class ComputeLoss:
 
                 # Heading
                 phead = ps[:, -1]  # last value is heading (assuming scalar, normalized 0-1)
-                phead = phead * 2 * torch.pi  # scaling to radians
+                # TODO: wrong rescaling, heading is predicted in which range? (not 0-1)
+                #phead = phead * 2 * torch.pi  # scaling to radians
 
-                thead = heading[i]  # ground truth heading for this anchor, Shape: [n]
+                #thead = heading[i]  # ground truth heading for this anchor, Shape: [n]
 
-                lhead += angular_error(phead, thead)
+                # compute loss for heading
+                ang_error = angular_error(phead, heading)
+                lhead += ang_error
 
                 # Classification
                 if self.nc > 1:  # cls loss (only if multiple classes)
@@ -530,14 +534,15 @@ class ComputeLoss:
 
         if self.autobalance:
             self.balance = [x / self.balance[self.ssi] for x in self.balance]
+
         lbox *= self.hyp['box']
         lobj *= self.hyp['obj']
         lcls *= self.hyp['cls']
         ldist *= self.hyp['distance']
         lhead *= self.hyp['heading']
-        # ldist *= 0.02
+
         bs = tobj.shape[0]  # batch size
-        #print("distance loss is off")
+
         loss = lbox + lobj + lcls + ldist + lhead
         return loss * bs, torch.cat((lbox, lobj, lcls, ldist, lhead, loss)).detach()
 

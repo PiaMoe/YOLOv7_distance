@@ -511,17 +511,16 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                         l = np.array(l, dtype=np.float32)
 
                     if len(l):
-                        assert l.shape[1] == 6, 'labels require 6 columns each plus one for distances'
+                        assert l.shape[1] == 7, 'labels require 7 columns each (5 plus one for distances and heading)'
                         assert (l >= 0).all(), 'negative labels'
-                        assert (l[:, 1:-1] <= 1).all(), 'non-normalized or out of bounds coordinate labels'
+                        assert (l[:, 1:-2] <= 1).all(), 'non-normalized or out of bounds coordinate labels'
                         assert np.unique(l, axis=0).shape[0] == l.shape[0], 'duplicate labels'
                     else:
                         ne += 1  # label empty
-                        l = np.zeros((0, 6), dtype=np.float32)
+                        l = np.zeros((0, 7), dtype=np.float32)
                 else:
                     nm += 1  # label missing
-                    # l = np.zeros((0, 5), dtype=np.float32)
-                    l = np.zeros((0, 6), dtype=np.float32)
+                    l = np.zeros((0, 7), dtype=np.float32)
                 x[im_file] = [l, shape, segments]
             except Exception as e:
                 nc += 1
@@ -586,10 +585,8 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             shapes = (h0, w0), ((h / h0, w / w0), pad)  # for COCO mAP rescaling
 
             labels = self.labels[index].copy()
-
             if labels.size:  # normalized xywh to pixel xyxy format
-                labels[:, 1:-1] = xywhn2xyxy(labels[:, 1:-1], ratio[0] * w, ratio[1] * h, padw=pad[0], padh=pad[1])
-
+                labels[:, 1:-2] = xywhn2xyxy(labels[:, 1:-2], ratio[0] * w, ratio[1] * h, padw=pad[0], padh=pad[1])
 
         if self.augment:
             # print("Warning commented out random perspective augmentation")
@@ -633,17 +630,17 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             # if not self.prefix in ['val','test']:
             if self.traintestval == 'train':
                 max_distance = hyp["max_distance"]
-                labels[:, -1] = np.clip(labels[:, -1], 0, max_distance)  # clamp distances to max_distance at most
+                labels[:, -2] = np.clip(labels[:, -2], 0, max_distance)  # clamp distances to max_distance at most
                 if hyp["normalization_strategy"] == 'log':
-                    labels[:, -1] = np.log(labels[:, -1] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
-                    labels[:, -1] = labels[:, -1] / np.log(max_distance)
+                    labels[:, -2] = np.log(labels[:, -2] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
+                    labels[:, -2] = labels[:, -2] / np.log(max_distance)
                 elif hyp["normalization_strategy"] == 'log_negative':
-                    labels[:, -1] = np.log(labels[:, -1] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
-                    labels[:, -1] = labels[:, -1] / np.log(max_distance) - 0.5
+                    labels[:, -2] = np.log(labels[:, -2] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
+                    labels[:, -2] = labels[:, -2] / np.log(max_distance) - 0.5
                 elif hyp["normalization_strategy"] == 'linear':
-                    labels[:, -1] = labels[:, -1] / max_distance
+                    labels[:, -2] = labels[:, -2] / max_distance
                 elif hyp["normalization_strategy"] == 'linear_negative':
-                    labels[:, -1] = labels[:, -1] / max_distance - 0.5
+                    labels[:, -2] = labels[:, -2] / max_distance - 0.5
                 else:
                     raise ValueError("no normalization strategy defined")
         if self.augment:
@@ -659,12 +656,10 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                 if nL:
                     labels[:, 1] = 1 - labels[:, 1]
 
-        labels_out = torch.zeros((nL, 7))
+        labels_out = torch.zeros((nL, 8))
         # print("labels shape ", labels.shape)
         if nL:
             labels_out[:, 1:] = torch.from_numpy(labels)
-        # else:
-        #     print("jo")
 
         # Convert
         img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
@@ -713,7 +708,6 @@ def load_image(self, index):
     if img is None:  # not cached
         path = self.img_files[index]
         img = cv2.imread(path)  # BGR
-        # print(path)
         assert img is not None, 'Image Not Found ' + path
         h0, w0 = img.shape[:2]  # orig hw
         r = self.img_size / max(h0, w0)  # resize image to img_size
