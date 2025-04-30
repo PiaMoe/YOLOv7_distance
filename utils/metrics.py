@@ -15,7 +15,7 @@ def fitness(x):
     return (x[:, :6] * w).sum(1)
 
 
-def ap_per_class(tp, conf, pred_cls, target_cls, pred_dist, target_dist, v5_metric=False, plot=False, save_dir='.', names=()):
+def ap_per_class(tp, conf, pred_cls, target_cls, v5_metric=False, plot=False, save_dir='.', names=()):
     """ Compute the average precision, given the recall and precision curves.
     Source: https://github.com/rafaelpadilla/Object-Detection-Metrics.
     # Arguments
@@ -23,8 +23,6 @@ def ap_per_class(tp, conf, pred_cls, target_cls, pred_dist, target_dist, v5_metr
         conf:  Objectness value from 0-1 (nparray).
         pred_cls:  Predicted object classes (nparray).
         target_cls:  True object classes (nparray).
-        pred_dist:  Predicted object classes (nparray).
-        target_dist:  True object classes (nparray).
         plot:  Plot precision-recall curve at mAP@0.5
         save_dir:  Plot save directory
     # Returns
@@ -33,7 +31,7 @@ def ap_per_class(tp, conf, pred_cls, target_cls, pred_dist, target_dist, v5_metr
 
     # Sort by objectness
     i = np.argsort(-conf)
-    tp, conf, pred_cls, pred_dist = tp[i], conf[i], pred_cls[i], pred_dist[i]
+    tp, conf, pred_cls = tp[i], conf[i], pred_cls[i]
 
     # Find unique classes
     unique_classes = np.unique(target_cls)
@@ -42,22 +40,14 @@ def ap_per_class(tp, conf, pred_cls, target_cls, pred_dist, target_dist, v5_metr
     # Create Precision-Recall curve and compute AP for each class
     px, py = np.linspace(0, 1, 1000), []  # for plotting
     ap, p, r = np.zeros((nc, tp.shape[1])), np.zeros((nc, 1000)), np.zeros((nc, 1000))
-    # distance_errors = []
     for ci, c in enumerate(unique_classes):
         i = pred_cls == c
         n_l = (target_cls == c).sum()  # number of labels
         n_p = i.sum()  # number of predictions
 
         if n_p == 0 or n_l == 0:
-            # distance_errors.append(np.nan)
             continue
         else:
-            # Compute distance errors for each prediction for class c
-            # class_pred_dists = pred_dist[i]
-            # class_target_dists = target_dist[target_cls == c]
-            # errors = np.abs(class_pred_dists - class_target_dists)
-            # distance_errors.append(errors.mean())  # Store the mean error for class c
-
             # Accumulate FPs and TPs
             fpc = (1 - tp[i]).cumsum(0)
             tpc = tp[i].cumsum(0)
