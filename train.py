@@ -438,8 +438,8 @@ def train(hyp, opt, device, tb_writer=None):
 
             # Write
             with open(results_file, 'a') as f:
-                print("results:" + str(results))
-                f.write(s + '%10.4g' * 10 % results + '\n')  # append metrics, val_loss
+                #print("results:" + str(results))
+                f.write(s + '%10.4g' * len(results) % results + '\n')  # append metrics, val_loss
             if len(opt.name) and opt.bucket:
                 os.system('gsutil cp %s gs://%s/results/results%s.txt' % (results_file, opt.bucket, opt.name))
 
@@ -547,10 +547,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', type=str, default='weights/yolov7.pt', help='initial weights path')
     parser.add_argument('--cfg', type=str, default='cfg/training/yolov7_custom.yaml', help='model.yaml path')
-    parser.add_argument('--data', type=str, default='data/debug_data.yaml', help='data.yaml path')
+    parser.add_argument('--data', type=str, default='data/distHeadData.yaml', help='data.yaml path')
     parser.add_argument('--hyp', type=str, default='data/hyp.scratch.p5.yaml', help='hyperparameters path')
-    parser.add_argument('--epochs', type=int, default=2)
-    parser.add_argument('--batch-size', type=int, default=2, help='total batch size for all GPUs')
+    parser.add_argument('--epochs', type=int, default=5)
+    parser.add_argument('--batch-size', type=int, default=4, help='total batch size for all GPUs')
     parser.add_argument('--img-size', nargs='+', type=int, default=[1024, 1024], help='[train, test] image sizes')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
     parser.add_argument('--resume', nargs='?', const=True, default=False, help='resume most recent training')

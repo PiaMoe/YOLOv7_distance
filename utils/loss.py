@@ -497,9 +497,15 @@ class ComputeLoss:
                 # ldist += self.MSEdist(pdist, distance_targets[b, a, gj, gi])  # You need to ensure indices match here
                 # matched_distance_targets = distance_targets[b]  # This is likely incorrect; you need a correct method here
 
+                # TODO: debug - welche Werte in distances? passt -1 rausfiltern noch?
+                # Distance loss (only if distance != -1)
+                valid_dist_mask = distance != -1
+                if valid_dist_mask.any():
+                    ldist += self.L1dist(pdist[valid_dist_mask], distance[valid_dist_mask])
+
                 # Calculate MSE loss for distances
                 # ldist += self.MSEdist(pdist, distance)
-                ldist += self.L1dist(pdist, distance)
+                #ldist += self.L1dist(pdist, distance)
 
                 # loss_distance = torch.where((distance == 1) & (pdist > 1), torch.zeros_like(pdist), (pdist - distance))
                 # ldist += loss_distance.mean()
@@ -512,9 +518,16 @@ class ComputeLoss:
 
                 #thead = heading[i]  # ground truth heading for this anchor, Shape: [n]
 
+
+                # Heading loss (nur wenn heading != -1)
+                valid_head_mask = heading != -1
+                if valid_head_mask.any():
+                    ang_error = angular_error(phead[valid_head_mask], heading[valid_head_mask])
+                    lhead += ang_error
+
                 # compute loss for heading
-                ang_error = angular_error(phead, heading)
-                lhead += ang_error
+                #ang_error = angular_error(phead, heading)
+                #lhead += ang_error
 
                 # Classification
                 if self.nc > 1:  # cls loss (only if multiple classes)

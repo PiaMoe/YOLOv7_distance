@@ -512,7 +512,9 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
 
                     if len(l):
                         assert l.shape[1] == 7, 'labels require 7 columns each (5 plus one for distances and heading)'
-                        assert (l >= 0).all(), 'negative labels'
+                        # TODO: bei -1 labels nicht direkt verwerfen
+                        #assert (l >= 0).all(), 'negative labels'
+                        assert (l[:, 1:-2] >= 0).all(), 'negative bbox/label values'
                         assert (l[:, 1:-2] <= 1).all(), 'non-normalized or out of bounds coordinate labels'
                         assert np.unique(l, axis=0).shape[0] == l.shape[0], 'duplicate labels'
                     else:
@@ -630,19 +632,25 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             # if not self.prefix in ['val','test']:
             if self.traintestval == 'train':
                 max_distance = hyp["max_distance"]
-                labels[:, -2] = np.clip(labels[:, -2], 0, max_distance)  # clamp distances to max_distance at most
+
+                # TODO: potenzielle Fehlerquelle (valid mask) & heading auch normalisieren
+                # only normalize values that are not -1
+                valid_mask = labels[:, -2] != -1
+
+                labels[valid_mask, -2] = np.clip(labels[valid_mask, -2], 0, max_distance)
                 if hyp["normalization_strategy"] == 'log':
-                    labels[:, -2] = np.log(labels[:, -2] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
-                    labels[:, -2] = labels[:, -2] / np.log(max_distance)
+                    labels[valid_mask, -2] = np.log(labels[valid_mask, -2] + 1)
+                    labels[valid_mask, -2] /= np.log(max_distance)
                 elif hyp["normalization_strategy"] == 'log_negative':
-                    labels[:, -2] = np.log(labels[:, -2] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
-                    labels[:, -2] = labels[:, -2] / np.log(max_distance) - 0.5
+                    labels[valid_mask, -2] = np.log(labels[valid_mask, -2] + 1)
+                    labels[valid_mask, -2] = labels[valid_mask, -2] / np.log(max_distance) - 0.5
                 elif hyp["normalization_strategy"] == 'linear':
-                    labels[:, -2] = labels[:, -2] / max_distance
+                    labels[valid_mask, -2] /= max_distance
                 elif hyp["normalization_strategy"] == 'linear_negative':
-                    labels[:, -2] = labels[:, -2] / max_distance - 0.5
+                    labels[valid_mask, -2] = labels[valid_mask, -2] / max_distance - 0.5
                 else:
                     raise ValueError("no normalization strategy defined")
+
         if self.augment:
             # flip up-down
             if random.random() < hyp['flipud']:
