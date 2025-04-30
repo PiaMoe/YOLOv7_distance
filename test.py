@@ -168,7 +168,7 @@ def test(data,
                         loss_targets[:, -2] = loss_targets[:, -2] / torch.log(max_distance)
                     elif hyp["normalization_strategy"] == 'log_negative':
                         loss_targets[:, -2] = torch.log(loss_targets[:, -2] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
-                        loss_targets[:, -2] = labels[:, -2] / torch.log(max_distance) - 0.5
+                        loss_targets[:, -2] = loss_targets[:, -2] / torch.log(max_distance) - 0.5
                     elif hyp["normalization_strategy"] == 'linear':
                         loss_targets[:, -2] = loss_targets[:, -2] / max_distance
                     elif hyp["normalization_strategy"] == 'linear_negative':
@@ -277,6 +277,7 @@ def test(data,
 
                         # Append detections
                         detected_set = set()
+                        # threshold for iouv to match bounding boxes with ground truth (iouv[0] = 0.5)
                         for j in (ious > iouv[0]).nonzero(as_tuple=False):
                             d = ti[i[j]]  # detected target
                             if d.item() not in detected_set:
@@ -292,6 +293,7 @@ def test(data,
                                 pred_head = pred[pi[j], -1]
                                 target_head = labels[d, -1]
 
+                                # calculate distance error
                                 pred_conf = pred[pi[j], 4]
                                 distance_error = abs(pred_dist - target_dist)
                                 dist_errors_plot.append([float(target_dist.cpu()), float(pred_dist.cpu() - target_dist.cpu())])
@@ -300,18 +302,21 @@ def test(data,
                                 distance_conf_and_error_and_gt = [float(pred_conf), float(distance_error), float(target_dist), float(pred_dist)]
                                 distance_errors_per_cat[int(cls)].append(distance_conf_and_error_and_gt)
 
-                                heading_error = abs(pred_head - target_head)
-                                head_pred_and_gt.append([float(target_head.cpu()), float(pred_head.cpu())])
-                                head_errors_plot.append( [float(target_head.cpu()), float(pred_head.cpu() - target_head.cpu())])
-                                head_conf_and_error_and_gt = [float(pred_conf), float(heading_error), float(target_head), float(pred_head)]
+                                # calculate heading error
+                                target_head = float(target_head.cpu())
+                                pred_head = float(pred_head.cpu())
+                                heading_error = min(abs(pred_head - target_head), 360 - abs(pred_head - target_head))
+                                head_pred_and_gt.append([target_head, pred_head])
+                                head_errors_plot.append([target_head, pred_head - target_head])
+                                head_conf_and_error_and_gt = [float(pred_conf), heading_error, target_head, pred_head]
                                 head_errors_per_cat[int(cls)].append(head_conf_and_error_and_gt)
 
                                 if len(detected) == nl:  # all targets already located in image
                                     break
                 distance_errors.append(distance_errors_per_cat)
                 head_errors.append([head_errors_per_cat])
-            # Append statistics (correct, conf, pcls, tcls)
-            stats.append((correct.cpu(), pred[:, 4].cpu(), pred[:, 5].cpu(), tcls, pred[:,-2].cpu(), tdist, thead))
+            # Append statistics (correct, conf, pcls, tcls, pdist, tdist, phead, thead)
+            stats.append((correct.cpu(), pred[:, 4].cpu(), pred[:, 5].cpu(), tcls, pred[:,-2].cpu(), tdist, pred[:,-1].cpu(), thead))
 
         # Plot images
         if plots and batch_i < 3:
@@ -329,7 +334,8 @@ def test(data,
         distance_bins = create_distance_bins(1000, 10)   # use default dist of 1000 m if no hyperparameters passed
 
     if len(stats) and stats[0].any():
-        p, r, ap, f1, ap_class = ap_per_class(*stats, plot=plots, v5_metric=v5_metric, save_dir=save_dir, names=names)
+        tp, conf, pred_cls, target_cls = stats[:4]
+        p, r, ap, f1, ap_class = ap_per_class(tp, conf, pred_cls, target_cls, plot=plots, v5_metric=v5_metric, save_dir=save_dir, names=names)
         ap50, ap = ap[:, 0], ap.mean(1)  # AP@0.5, AP@0.5:0.95
         mp, mr, map50, map = p.mean(), r.mean(), ap50.mean(), ap.mean()
         nt = np.bincount(stats[3].astype(np.int64), minlength=nc)  # number of targets per class
@@ -347,6 +353,9 @@ def test(data,
     abs_dist_err_boat = 0 # absolute dist error without conf weights
     total_conf_boat = 0
     samples = 0
+    mean_abs_dist_err_boat_comp = None
+    weighted_mean_dist_err_boat_comp = None
+
     # print(distance_errors)
     for distance_err in distance_errors:
         if 0 in distance_err.keys():
@@ -366,8 +375,10 @@ def test(data,
                         break
 
     # compress bins for console logging
-    mean_abs_dist_err_boat_comp = compressBins(abs_dist_err_boat_bins, samples_per_bin)
-    weighted_mean_dist_err_boat_comp = compressBins(mean_dist_err_boat_bins, total_conf_boat_bins)
+    if mean_dist_err_boat_bins:
+        mean_abs_dist_err_boat_comp = compressBins(abs_dist_err_boat_bins, samples_per_bin)
+    if mean_dist_err_boat_bins:
+        weighted_mean_dist_err_boat_comp = compressBins(mean_dist_err_boat_bins, total_conf_boat_bins)
 
     # Calculate the weighted mean distance error for each bin
     weighted_mean_dist_err_boat_bins = {
@@ -382,9 +393,8 @@ def test(data,
         if samples_per_bin[bin_key] > 0 else -1
         for bin_key in distance_bins
     }
-    
-    mean_abs_dist_err_boat = abs_dist_err_boat / samples
 
+    mean_abs_dist_err_boat = abs_dist_err_boat / samples if samples != 0 else -1
 
     # Calculate the overall weighted mean distance error
     overall_weighted_mean_dist_err_boat = total_mean_dist_err_boat / total_conf_boat if total_conf_boat > 0 else -1
@@ -395,15 +405,18 @@ def test(data,
 
 
     # Print the results for each bin
-    for bin_key in mean_abs_dist_err_boat_comp:
-        print(f"Distance bin {bin_key}:")
-        print("  samples: ", mean_abs_dist_err_boat_comp[bin_key]['n'])
-        print("  weighted_reL_dist_err_boat =", weighted_mean_dist_err_boat_comp[bin_key]['err'])
-        print("  abs_mean_dist_err_boat =", mean_abs_dist_err_boat_comp[bin_key]['err'])
-        metrics_bin_distances["metrics/distancebins/weighted_rel_dist_err_boat_"+str(bin_key)] = weighted_mean_dist_err_boat_comp[bin_key]['err']
-        metrics_bin_distances["metrics/distancebins/abs_mean_dist_err_boat_"+str(bin_key)] = mean_abs_dist_err_boat_comp[bin_key]['err']
-    if not wandb_logger is None:
-        wandb_logger.log(metrics_bin_distances)
+    if mean_abs_dist_err_boat_comp:
+        for bin_key in mean_abs_dist_err_boat_comp:
+            print(f"Distance bin {bin_key}:")
+            print("  samples: ", mean_abs_dist_err_boat_comp[bin_key]['n'])
+            print("  weighted_reL_dist_err_boat =", weighted_mean_dist_err_boat_comp[bin_key]['err'])
+            print("  abs_mean_dist_err_boat =", mean_abs_dist_err_boat_comp[bin_key]['err'])
+            metrics_bin_distances["metrics/distancebins/weighted_rel_dist_err_boat_"+str(bin_key)] = weighted_mean_dist_err_boat_comp[bin_key]['err']
+            metrics_bin_distances["metrics/distancebins/abs_mean_dist_err_boat_"+str(bin_key)] = mean_abs_dist_err_boat_comp[bin_key]['err']
+        if not wandb_logger is None:
+            wandb_logger.log(metrics_bin_distances)
+    else:
+        print("No bounding boxes matched --> no distance error")
 
     # Print the overall results
     print("Total Samples: ", samples)
