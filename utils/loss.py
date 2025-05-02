@@ -14,9 +14,7 @@ def smooth_BCE(eps=0.1):  # https://github.com/ultralytics/yolov3/issues/238#iss
 
 # TODO: which loss function for heading
 def angular_error(pred, target):
-    #pred = torch.rad2deg(pred_rad)
-    #target = torch.rad2deg(target_rad)
-    L = torch.min(torch.abs(pred - target), 360 - torch.abs(pred - target))
+    L = torch.min(torch.abs(pred - target), 1 - torch.abs(pred - target))
     return torch.mean(L)
 
 def cos_error(pred, target):
@@ -492,42 +490,33 @@ class ComputeLoss:
                 # Objectness
                 tobj[b, a, gj, gi] = (1.0 - self.gr) + self.gr * iou.detach().clamp(0).type(tobj.dtype)  # iou ratio
 
-                #distances
+
+                # predicted distance
                 pdist = ps[:, -2].sigmoid()  # assuming the second last element is distance, TODO currently with sigmoid
                 # ldist += self.MSEdist(pdist, distance_targets[b, a, gj, gi])  # You need to ensure indices match here
                 # matched_distance_targets = distance_targets[b]  # This is likely incorrect; you need a correct method here
 
-                # TODO: debug - welche Werte in distances? passt -1 rausfiltern noch?
-                # Distance loss (only if distance != -1)
-                valid_dist_mask = distance != -1
+                # Distance loss
+                valid_dist_mask = distance != -1    # filter out missing ground truth values
                 if valid_dist_mask.any():
                     ldist += self.L1dist(pdist[valid_dist_mask], distance[valid_dist_mask])
 
                 # Calculate MSE loss for distances
                 # ldist += self.MSEdist(pdist, distance)
                 #ldist += self.L1dist(pdist, distance)
-
                 # loss_distance = torch.where((distance == 1) & (pdist > 1), torch.zeros_like(pdist), (pdist - distance))
                 # ldist += loss_distance.mean()
 
+                # TODO: normalize heading predictions?
+                # predicted heading
+                phead = ps[:, -1].sigmoid()  # last value is heading (normalized 0-1)
 
-                # Heading
-                phead = ps[:, -1]  # last value is heading (assuming scalar, normalized 0-1)
-                # TODO: wrong rescaling, heading is predicted in which range? (not 0-1)
-                #phead = phead * 2 * torch.pi  # scaling to radians
-
-                #thead = heading[i]  # ground truth heading for this anchor, Shape: [n]
-
-
-                # Heading loss (nur wenn heading != -1)
-                valid_head_mask = heading != -1
+                # Heading loss
+                valid_head_mask = heading != -1    # filter out missing ground truth values
                 if valid_head_mask.any():
                     ang_error = angular_error(phead[valid_head_mask], heading[valid_head_mask])
                     lhead += ang_error
 
-                # compute loss for heading
-                #ang_error = angular_error(phead, heading)
-                #lhead += ang_error
 
                 # Classification
                 if self.nc > 1:  # cls loss (only if multiple classes)

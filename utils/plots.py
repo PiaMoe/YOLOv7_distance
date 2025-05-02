@@ -584,3 +584,25 @@ def plot_dist_pred(data, path):
     plt.savefig(path)
     
 # TODO: plot heading error
+def plot_heading_pred(data, path):
+    fig, ax = plt.subplots()
+    for x in data:
+        # Compute angular error (in degrees)
+        diff_deg = abs(x[0] - x[1]) * 360
+        diff_deg = min(diff_deg, 360 - diff_deg)  # account for periodicity
+
+        # Color based on error
+        color = rgb.tue_blue if diff_deg < 30 else rgb.tue_red
+        ax.plot(x[0], x[1], 'o', alpha=0.6, color=color, markersize=3, mec='none')
+
+    data = np.asarray(data)
+    ax.plot([0, 1], [0, 1], linestyle='--', color=rgb.tue_darkgreen, alpha=1)
+
+    ax.set_ylabel("Predicted Heading (normalized)")
+    ax.set_xlabel("Ground Truth Heading (normalized)")
+    ax.set_xticks([0, 0.25, 0.5, 0.75, 1.0])
+    ax.set_yticks([0, 0.25, 0.5, 0.75, 1.0])
+    ax.set_xticklabels(['0°', '90°', '180°', '270°', '360°'])
+    ax.set_yticklabels(['0°', '90°', '180°', '270°', '360°'])
+
+    plt.savefig(path)

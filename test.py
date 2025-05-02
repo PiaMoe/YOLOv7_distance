@@ -14,7 +14,7 @@ from utils.datasets import create_dataloader
 from utils.general import coco80_to_coco91_class, check_dataset, check_file, check_img_size, check_requirements, \
     box_iou, non_max_suppression, scale_coords, xyxy2xywh, xywh2xyxy, set_logging, increment_path, colorstr
 from utils.metrics import ap_per_class, ConfusionMatrix
-from utils.plots import plot_images, output_to_target, plot_study_txt, plot_dist_err, plot_errors, plot_dist_pred
+from utils.plots import plot_images, output_to_target, plot_study_txt, plot_dist_err, plot_errors, plot_dist_pred, plot_heading_pred
 from utils.torch_utils import select_device, time_synchronized, TracedModel
 
 
@@ -179,7 +179,10 @@ def test(data,
                     # if no hyperparameter file passed use default normalization strategy (linear, max_dist = 1km)
                     loss_targets[:, -2] = loss_targets[:, -2] / 1000
 
-                # TODO: heading normalization ?
+                # TODO: heading normalization
+                max_heading = 360
+                loss_targets[:, -1] /= max_heading
+
                 L = compute_loss([x.float() for x in train_out], loss_targets)[1][:5]  # box, obj, cls, dist, heading
                 loss += L
 
@@ -458,9 +461,10 @@ def test(data,
         plot_errors(dist_errors_plot, bins=5, max_dist=distance_bins[-1][1], path=os.path.join(save_dir, 'dist_errors.pdf'))
         plot_dist_pred(dist_pred_and_gt, path = os.path.join(save_dir, 'dist_pred.pdf'))
 
+        # TODO: correct plots
         # plot heading errors
-        plot_errors(head_errors_plot, bins=5, max_dist=distance_bins[-1][1], path=os.path.join(save_dir, 'head_errors.pdf'))
-        plot_dist_pred(dist_pred_and_gt, path=os.path.join(save_dir, 'dist_pred.pdf'))
+        plot_heading_pred(head_pred_and_gt, path=os.path.join(save_dir, 'head_err.pdf'))
+
 
         confusion_matrix.plot(save_dir=save_dir, names=list(names.values()))
         if wandb_logger and wandb_logger.wandb:

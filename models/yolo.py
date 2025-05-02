@@ -171,6 +171,7 @@ class IDetect(nn.Module):
                 y[..., 0:2] = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy
                 y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
                 y[..., -2] = self.rescale_dist(y[..., -2])  # rescale dist based on norm strategy
+                y[..., -1] = self.rescale_heading(y[..., -1])
                 z.append(y.view(bs, -1, self.no))
 
         return x if self.training else (torch.cat(z, 1), x)
@@ -181,7 +182,7 @@ class IDetect(nn.Module):
             rescaled_dist = torch.exp(rescaled_dist) - 1
         elif self.normalization_strategy == "log_negative":
             rescaled_dist = (dist_pred_normalized + 0.5) * np.log(self.max_distance)
-            rescaled_dist = torch.exp(y[..., -2]) - 1
+            rescaled_dist = torch.exp(rescaled_dist) - 1
         elif self.normalization_strategy == "linear":
             rescaled_dist = (dist_pred_normalized) * self.max_distance
         elif self.normalization_strategy == "linear_negative":
@@ -193,9 +194,9 @@ class IDetect(nn.Module):
         return rescaled_dist
 
     def rescale_heading(self, heading_pred_normalized):
-        # TODO: heading normalization?
-        #rescaled_heading = heading_pred_normalized * self.max_head_deg
-        rescaled_heading = torch.clip(heading_pred_normalized, 0, self.max_head_deg)
+        # TODO: heading rescaling
+        rescaled_heading = heading_pred_normalized * self.max_head_deg
+        rescaled_heading = torch.clip(rescaled_heading, 0, self.max_head_deg)
         return rescaled_heading
 
 

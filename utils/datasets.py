@@ -632,24 +632,31 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             # if not self.prefix in ['val','test']:
             if self.traintestval == 'train':
                 max_distance = hyp["max_distance"]
+                max_head_deg = 360
 
-                # TODO: potenzielle Fehlerquelle (valid mask) & heading auch normalisieren
-                # only normalize values that are not -1
-                valid_mask = labels[:, -2] != -1
+                # only normalize values that are not -1 to be able to filter out missing values later
+                valid_mask_d = labels[:, -2] != -1
+                valid_mask_h = labels[:, -1] != -1
 
-                labels[valid_mask, -2] = np.clip(labels[valid_mask, -2], 0, max_distance)
+                # normalize distances based on strategy
+                labels[valid_mask_d, -2] = np.clip(labels[valid_mask_d, -2], 0, max_distance)
                 if hyp["normalization_strategy"] == 'log':
-                    labels[valid_mask, -2] = np.log(labels[valid_mask, -2] + 1)
-                    labels[valid_mask, -2] /= np.log(max_distance)
+                    labels[valid_mask_d, -2] = np.log(labels[valid_mask_d, -2] + 1)
+                    labels[valid_mask_d, -2] /= np.log(max_distance)
                 elif hyp["normalization_strategy"] == 'log_negative':
-                    labels[valid_mask, -2] = np.log(labels[valid_mask, -2] + 1)
-                    labels[valid_mask, -2] = labels[valid_mask, -2] / np.log(max_distance) - 0.5
+                    labels[valid_mask_d, -2] = np.log(labels[valid_mask_d, -2] + 1)
+                    labels[valid_mask_d, -2] = labels[valid_mask_d, -2] / np.log(max_distance) - 0.5
                 elif hyp["normalization_strategy"] == 'linear':
-                    labels[valid_mask, -2] /= max_distance
+                    labels[valid_mask_d, -2] /= max_distance
                 elif hyp["normalization_strategy"] == 'linear_negative':
-                    labels[valid_mask, -2] = labels[valid_mask, -2] / max_distance - 0.5
+                    labels[valid_mask_d, -2] = labels[valid_mask_d, -2] / max_distance - 0.5
                 else:
                     raise ValueError("no normalization strategy defined")
+
+                # TODO: heading normalization
+                # normalize headings linearly
+                labels[valid_mask_h, -1] /= max_head_deg
+
 
         if self.augment:
             # flip up-down
