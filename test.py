@@ -296,6 +296,9 @@ def test(data,
                                 pred_head = pred[pi[j], -1]
                                 target_head = labels[d, -1]
 
+                                if target_dist == -1 or target_head == -1:
+                                    continue
+
                                 # calculate distance error
                                 pred_conf = pred[pi[j], 4]
                                 distance_error = abs(pred_dist - target_dist)
@@ -308,9 +311,10 @@ def test(data,
                                 # calculate heading error
                                 target_head = float(target_head.cpu())
                                 pred_head = float(pred_head.cpu())
+                                # TODO: correct heading error
                                 heading_error = min(abs(pred_head - target_head), 360 - abs(pred_head - target_head))
                                 head_pred_and_gt.append([target_head, pred_head])
-                                head_errors_plot.append([target_head, pred_head - target_head])
+                                head_errors_plot.append([target_head, heading_error])
                                 head_conf_and_error_and_gt = [float(pred_conf), heading_error, target_head, pred_head]
                                 head_errors_per_cat[int(cls)].append(head_conf_and_error_and_gt)
 
@@ -406,6 +410,16 @@ def test(data,
     # compute combined metric between mAP@0.5:0.95 and err_weighted_dist_rel+
     combined_metric = map * (1 - min(overall_weighted_mean_dist_err_boat, 1))
 
+    # heading error
+    total_head_error = 0.0
+    count = 0
+    for class_id, errors in head_errors_per_cat.items():
+        for entry in errors:
+            _, heading_error, _, _ = entry
+            total_head_error += heading_error
+            count += 1
+    mean_heading_error = total_head_error / count if count > 0 else 0.0
+
 
     # Print the results for each bin
     if mean_abs_dist_err_boat_comp:
@@ -424,8 +438,11 @@ def test(data,
     # Print the overall results
     print("Total Samples: ", samples)
     print("Overall weighted_rel_dist_err_boat =", overall_weighted_mean_dist_err_boat)
-    print("Overall abs_mean_dist_err_boat =", mean_abs_dist_err_boat)
-    print("Combined Metric = ", combined_metric)
+    print("Overall abs_mean_dist_err_boat =", mean_abs_dist_err_boat)#
+    print(f"Mean heading error = {mean_heading_error} in degrees")
+    print("Combined Metric (MAP & distance) = ", combined_metric)
+    # TODO: invent combined metric
+    print("Combined_metric (MAP, distance & heading) = not computed yet")
     metrics_overall_distance = {}
     metrics_overall_distance["metrics/weighted_rel_dist_err_boat"] = overall_weighted_mean_dist_err_boat
     metrics_overall_distance["metrics/abs_mean_dist_err_boat"] = mean_abs_dist_err_boat

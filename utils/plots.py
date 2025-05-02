@@ -110,8 +110,8 @@ def output_to_target(output):
     # Convert model output to target format [batch_id, class_id, x, y, w, h, conf]
     targets = []
     for i, o in enumerate(output):
-        for *box, conf, cls, dist in o.cpu().numpy():
-            targets.append([i, cls, *list(*xyxy2xywh(np.array(box)[None])), conf, dist])
+        for *box, conf, cls, dist, heading in o.cpu().numpy():
+            targets.append([i, cls, *list(*xyxy2xywh(np.array(box)[None])), conf, dist, heading])
     return np.array(targets)
 
 
@@ -157,8 +157,9 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
             image_targets = targets[targets[:, 0] == i]
             boxes = xywh2xyxy(image_targets[:, 2:6]).T
             classes = image_targets[:, 1].astype('int')
-            distances = image_targets[:, -1]
-            labels = image_targets.shape[1] == 6+1  # labels if no conf column (+1 bc of distance)
+            distances = image_targets[:, -2]
+            headings = image_targets[:, -1]
+            labels = image_targets.shape[1] == 6+2  # labels if no conf column (+2 bc of distance & heading)
             conf = None if labels else image_targets[:, 6]  # check for confidence presence (label vs pred)
 
             if boxes.shape[1]:
@@ -172,6 +173,7 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
             for j, box in enumerate(boxes.T):
                 cls = int(classes[j])
                 dist = distances[j]
+                heading = headings[j]
                 #TODO change in dataset.py as well if you change here and vice versa distances
                 if labels:
                     pass
@@ -184,7 +186,7 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
                 color = colors[cls % len(colors)]
                 cls = names[cls] if names else cls
                 if labels or conf[j] > 0.25:  # 0.25 conf thresh
-                    label = '%s %.3f' % (cls, dist) if labels else '%s %.1f %.1f' % (cls, conf[j], dist)
+                    label = '%s %.3f %.3f' % (cls, dist, heading) if labels else '%s %.1f %.1f %.1f' % (cls, conf[j], dist, heading)
                     plot_one_box(box, mosaic, label=label, color=color, line_thickness=tl)
 
         # Draw image filename labels
@@ -596,13 +598,9 @@ def plot_heading_pred(data, path):
         ax.plot(x[0], x[1], 'o', alpha=0.6, color=color, markersize=3, mec='none')
 
     data = np.asarray(data)
-    ax.plot([0, 1], [0, 1], linestyle='--', color=rgb.tue_darkgreen, alpha=1)
+    ax.plot([0, 360], [0, 360], linestyle='--', color=rgb.tue_darkgreen, alpha=1)
 
-    ax.set_ylabel("Predicted Heading (normalized)")
-    ax.set_xlabel("Ground Truth Heading (normalized)")
-    ax.set_xticks([0, 0.25, 0.5, 0.75, 1.0])
-    ax.set_yticks([0, 0.25, 0.5, 0.75, 1.0])
-    ax.set_xticklabels(['0°', '90°', '180°', '270°', '360°'])
-    ax.set_yticklabels(['0°', '90°', '180°', '270°', '360°'])
+    ax.set_ylabel("Predicted Heading")
+    ax.set_xlabel("Ground Truth Heading")
 
     plt.savefig(path)
