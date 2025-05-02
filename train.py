@@ -448,11 +448,14 @@ def train(hyp, opt, device, tb_writer=None):
                     'metrics/precision', 'metrics/recall', 'metrics/mAP_0.5', 'metrics/mAP_0.5:0.95',
                     'val/box_loss', 'val/obj_loss', 'val/cls_loss', 'val/dist_loss', 'val/head_loss',  # val loss
                     'x/lr0', 'x/lr1', 'x/lr2']  # params
-            for x, tag in zip(list(mloss[:-1]) + list(results) + lr, tags):
+            print("mloss: [lbox, lobj, lcls, ldist, lhead, loss]")
+            print(f"\nmloss:{mloss}\nresults: {results}\nlr: {lr}\n")
+            for x, tag in zip(list(mloss[:-1]) + list(results[:4]) + list(results[6:]) + lr, tags):
                 if tb_writer:
                     tb_writer.add_scalar(tag, x, epoch)  # tensorboard
                 if wandb_logger.wandb:
                     wandb_logger.log({tag: x})  # W&B
+                    print(f"{tag}: {x}")
 
             # Update best mAP
             fi = fitness(np.array(results).reshape(1, -1))  # weighted combination of [P, R, mAP@.5, mAP@.5-.95, distance error, combined metric]
@@ -547,7 +550,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', type=str, default='weights/yolov7.pt', help='initial weights path')
     parser.add_argument('--cfg', type=str, default='cfg/training/yolov7_custom.yaml', help='model.yaml path')
-    parser.add_argument('--data', type=str, default='data/distHeadData.yaml', help='data.yaml path')
+    parser.add_argument('--data', type=str, default='data/debug_data.yaml', help='data.yaml path')
     parser.add_argument('--hyp', type=str, default='data/hyp.scratch.p5.yaml', help='hyperparameters path')
     parser.add_argument('--epochs', type=int, default=3)
     parser.add_argument('--batch-size', type=int, default=4, help='total batch size for all GPUs')

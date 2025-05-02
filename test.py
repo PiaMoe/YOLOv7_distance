@@ -229,7 +229,7 @@ def test(data,
                 if wandb_logger.current_epoch % wandb_logger.bbox_interval == 0:
                     box_data = [{"position": {"minX": xyxy[0], "minY": xyxy[1], "maxX": xyxy[2], "maxY": xyxy[3]},
                                  "class_id": int(cls),
-                                 "box_caption": "%s %.3f" % (names[cls], conf),
+                                 "box_caption": "%s %.1f" % (names[cls], conf),
                                  "scores": {"class_score": conf},
                                  "distance": dist,
                                  "heading": heading,
@@ -446,13 +446,17 @@ def test(data,
     metrics_overall_distance = {}
     metrics_overall_distance["metrics/weighted_rel_dist_err_boat"] = overall_weighted_mean_dist_err_boat
     metrics_overall_distance["metrics/abs_mean_dist_err_boat"] = mean_abs_dist_err_boat
-    metrics_overall_distance["metrics/combined_metric"] = combined_metric 
+    metrics_overall_distance["metrics/combined_metric"] = combined_metric
+    metrics_heading = {}
+    metrics_heading["metrics/mean_head_err"] = mean_heading_error
     if not wandb_logger is None:
         wandb_logger.log(metrics_overall_distance)
+        wandb_logger.log(metrics_heading)
 
 
     # Print results
-    pf = '%20s' + '%12i' * 2 + '%12.3g' * 4  # print format
+    pf = '%20s' + '%12i' * 2 + '%12.3g' * 4
+    print("classes | seen = preds | nt = GT | mp = precision | mr = recall | mAP50 | mAP50-95")
     print(pf % ('all', seen, nt.sum(), mp, mr, map50, map))
 
     # Print results per class
@@ -524,7 +528,10 @@ def test(data,
     for i, c in enumerate(ap_class):
         maps[c] = ap[i]
 
-    return (mp, mr, map50, map,  1 - min(overall_weighted_mean_dist_err_boat, 1), combined_metric,
+    dist_err = 1 - min(overall_weighted_mean_dist_err_boat, 1)
+    print(f"\nresults:\nmp: {mp}\nmr: {mr}\nmap50: {map50}\nmap: {map}\ndist err: {dist_err}"
+          f"\ncombined metric: {combined_metric}\nlosses: {(loss.cpu() / len(dataloader)).tolist()}")
+    return (mp, mr, map50, map,  dist_err, combined_metric,
             *(loss.cpu() / len(dataloader)).tolist()), maps, t
 
 
