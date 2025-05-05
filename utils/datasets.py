@@ -512,7 +512,8 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
 
                     if len(l):
                         assert l.shape[1] == 7, 'labels require 7 columns each (5 plus one for distances and heading)'
-                        # TODO: bei -1 labels nicht direkt verwerfen
+                        # uncomment if all negative labels should be thrown away
+                        # currently: distance and heading can be negative but loss won't be computed
                         #assert (l >= 0).all(), 'negative labels'
                         assert (l[:, 1:-2] >= 0).all(), 'negative bbox/label values'
                         assert (l[:, 1:-2] <= 1).all(), 'non-normalized or out of bounds coordinate labels'
@@ -623,6 +624,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                     if len(sample_labels) == 0:
                         break
                 labels = pastein(img, labels, sample_labels, sample_images, sample_masks)
+
 
         nL = len(labels)  # number of labels
         if nL:

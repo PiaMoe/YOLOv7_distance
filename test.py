@@ -363,6 +363,7 @@ def test(data,
     mean_abs_dist_err_boat_comp = None
     weighted_mean_dist_err_boat_comp = None
 
+    # TODO: does error with confidence make sense?
     # print(distance_errors)
     for distance_err in distance_errors:
         if 0 in distance_err.keys():
@@ -407,7 +408,7 @@ def test(data,
     overall_weighted_mean_dist_err_boat = total_mean_dist_err_boat / total_conf_boat if total_conf_boat > 0 else -1
     metrics_bin_distances = {}
 
-    # compute combined metric between mAP@0.5:0.95 and err_weighted_dist_rel+
+    # compute combined metric between mAP@0.5:0.95 and err_weighted_dist_rel
     combined_metric = map * (1 - min(overall_weighted_mean_dist_err_boat, 1))
 
     # heading error
@@ -419,6 +420,10 @@ def test(data,
             total_head_error += heading_error
             count += 1
     mean_heading_error = total_head_error / count if count > 0 else 0.0
+    mean_heading_error_normalized = mean_heading_error / 180
+
+    # combined metric between mAP@0.5:0.95, err_weighted_dist_rel and mean_heading_error
+    combined_metric_with_head = map * (1 - min(overall_weighted_mean_dist_err_boat, 1)) * (1 - mean_heading_error_normalized)
 
 
     # Print the results for each bin
@@ -439,10 +444,9 @@ def test(data,
     print("Total Samples: ", samples)
     print("Overall weighted_rel_dist_err_boat =", overall_weighted_mean_dist_err_boat)
     print("Overall abs_mean_dist_err_boat =", mean_abs_dist_err_boat)#
-    print(f"Mean heading error = {mean_heading_error} in degrees")
+    print(f"Mean heading error = {mean_heading_error}%.1f degrees")
     print("Combined Metric (MAP & distance) = ", combined_metric)
-    # TODO: invent combined metric
-    print("Combined_metric (MAP, distance & heading) = not computed yet")
+    print("Combined_metric (MAP, distance & heading) = ", combined_metric_with_head)
     metrics_overall_distance = {}
     metrics_overall_distance["metrics/weighted_rel_dist_err_boat"] = overall_weighted_mean_dist_err_boat
     metrics_overall_distance["metrics/abs_mean_dist_err_boat"] = mean_abs_dist_err_boat

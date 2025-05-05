@@ -416,10 +416,10 @@ def plot_results_overlay(start=0, stop=0):  # from utils.plots import *; plot_re
 
 def plot_results(start=0, stop=0, bucket='', id=(), labels=(), save_dir=''):
     # Plot training 'results*.txt'. from utils.plots import *; plot_results(save_dir='runs/train/exp')
-    fig, ax = plt.subplots(2, 5, figsize=(12, 6), tight_layout=True)
+    fig, ax = plt.subplots(3, 4, figsize=(10, 8), tight_layout=True)
     ax = ax.ravel()
-    s = ['Box', 'Objectness', 'Distance', 'Heading', 'Precision', 'Recall',
-         'val Box', 'val Objectness', 'val Distance', 'mAP@0.5', 'mAP@0.5:0.95']
+    s = ['Box', 'Objectness', 'Distance', 'Heading', 'Precision', 'Recall', 'mAP@0.5', 'mAP@0.5:0.95',
+         'val Box', 'val Objectness', 'val Distance', 'val Heading']
     if bucket:
         # files = ['https://storage.googleapis.com/%s/results%g.txt' % (bucket, x) for x in id]
         files = ['results%g.txt' % x for x in id]
@@ -430,8 +430,7 @@ def plot_results(start=0, stop=0, bucket='', id=(), labels=(), save_dir=''):
     assert len(files), 'No results.txt files found in %s, nothing to plot.' % os.path.abspath(save_dir)
     for fi, f in enumerate(files):
         try:
-            # TODO: correct?
-            results = np.loadtxt(f, usecols=[2, 3, 5, 9, 10, 13, 14, 16, 17, 11, 12], ndmin=2).T
+            results = np.loadtxt(f, usecols=[2, 3, 5, 6, 10, 11, 12, 13, 16, 17, 19, 20], ndmin=2).T
             n = results.shape[1]  # number of rows
             x = range(start, min(stop, n) if stop else n)
             for i in range(10):
