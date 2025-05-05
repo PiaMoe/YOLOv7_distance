@@ -433,13 +433,13 @@ def plot_results(start=0, stop=0, bucket='', id=(), labels=(), save_dir=''):
             results = np.loadtxt(f, usecols=[2, 3, 5, 6, 10, 11, 12, 13, 16, 17, 19, 20], ndmin=2).T
             n = results.shape[1]  # number of rows
             x = range(start, min(stop, n) if stop else n)
-            for i in range(10):
+            for i in range(12):
                 y = results[i, x]
                 if i in [0, 1, 2, 5, 6, 7]:
                     y[y == 0] = np.nan  # don't show zero loss values
                     # y /= y[0]  # normalize
                 label = labels[fi] if len(labels) else f.stem
-                ax[i].plot(x, y, marker='.', label=label, linewidth=2, markersize=8)
+                ax[i].plot(x, y, marker='.', label=label, linewidth=1, markersize=5)
                 ax[i].set_title(s[i])
                 # if i in [5, 6, 7]:  # share train and val loss y axes
                 #     ax[i].get_shared_y_axes().join(ax[i], ax[i - 5])
@@ -603,3 +603,36 @@ def plot_heading_pred(data, path):
     ax.set_xlabel("Ground Truth Heading")
 
     plt.savefig(path)
+
+def plot_heading_err(data, path):
+    data = np.asarray(data)  # shape (N, 2): [gt_heading, pred_heading], both in [0, 1)
+    gt = data[:, 0] * 360
+    pred = data[:, 1] * 360
+
+    # Compute angular error
+    diff = np.abs(gt - pred)
+    angular_error = np.minimum(diff, 360 - diff)
+
+    # Define bins (8 bins = 45° each)
+    bins = np.linspace(0, 360, 9)
+    bin_centers = (bins[:-1] + bins[1:]) / 2
+    bin_errors = []
+
+    for i in range(8):
+        mask = (gt >= bins[i]) & (gt < bins[i+1])
+        if np.any(mask):
+            mean_error = angular_error[mask].mean()
+        else:
+            mean_error = 0
+        bin_errors.append(mean_error)
+
+    # Plot
+    plt.figure()
+    plt.bar(bin_centers, bin_errors, width=40, align='center', color='steelblue', edgecolor='black')
+    plt.xlabel("Ground Truth Heading (deg)")
+    plt.ylabel("Mean Angular Error (deg)")
+    plt.xticks(bins)
+    plt.grid(True, linestyle='--', alpha=0.5)
+    plt.tight_layout()
+    plt.savefig(path)
+
