@@ -488,7 +488,7 @@ def test(data,
 
         # plot heading errors
         plot_heading_pred(head_pred_and_gt, path=os.path.join(save_dir, 'head_pred.pdf'))
-        plot_heading_err(head_pred_and_gt, path=os.path.join(save_dir, 'head_err.pdf')
+        plot_heading_err(head_pred_and_gt, path=os.path.join(save_dir, 'head_err.pdf'))
 
 
         confusion_matrix.plot(save_dir=save_dir, names=list(names.values()))
