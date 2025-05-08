@@ -127,7 +127,7 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
     if np.max(images[0]) <= 1:
         images *= 255
 
-    tl = 3  # line thickness
+    tl = 2  # line thickness
     tf = max(tl - 1, 1)  # font thickness
     bs, _, h, w = images.shape  # batch size, _, height, width
     bs = min(bs, max_subplots)  # limit plot images
@@ -183,7 +183,7 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
                     # labels[:, -1] = np.clip(labels[:, -1], 0, 1000)  # clamp distances to 1000 at most
                     # labels[:, -1] = np.log(labels[:, -1] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
 
-                color = colors[cls % len(colors)]
+                color = colors[cls % len(colors) + 1]
                 cls = names[cls] if names else cls
                 if labels or conf[j] > 0.25:  # 0.25 conf thresh
                     label = '%s %.1f %.1f' % (cls, dist, heading) if labels else '%s %.1f %.1f %.1f' % (cls, conf[j], dist, heading)
@@ -192,12 +192,12 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
         # Draw image filename labels
         if paths:
             label = Path(paths[i]).name[:40]  # trim to 40 char
-            t_size = cv2.getTextSize(label, 0, fontScale=tl / 3, thickness=tf)[0]
+            t_size = cv2.getTextSize(label, 0, fontScale=tl / 4, thickness=tf)[0]
             cv2.putText(mosaic, label, (block_x + 5, block_y + t_size[1] + 5), 0, tl / 3, [220, 220, 220], thickness=tf,
                         lineType=cv2.LINE_AA)
 
         # Image border
-        cv2.rectangle(mosaic, (block_x, block_y), (block_x + w, block_y + h), (255, 255, 255), thickness=3)
+        cv2.rectangle(mosaic, (block_x, block_y), (block_x + w, block_y + h), (255, 255, 255), thickness=1)
 
     if fname:
         r = min(1280. / max(h, w) / ns, 1.0)  # ratio to limit image size
@@ -589,12 +589,13 @@ def plot_heading_pred(data, path):
     fig, ax = plt.subplots()
     for x in data:
         # Compute angular error (in degrees)
-        diff_deg = abs(x[0] - x[1]) * 360
-        diff_deg = min(diff_deg, 360 - diff_deg)  # account for periodicity
+        gt = x[0]
+        pred = x[1]
+        diff_deg = min(abs(gt - pred), 360 - abs(gt - pred))
 
         # Color based on error
         color = rgb.tue_blue if diff_deg < 30 else rgb.tue_red
-        ax.plot(x[0], x[1], 'o', alpha=0.6, color=color, markersize=3, mec='none')
+        ax.plot(gt, pred, 'o', alpha=0.6, color=color, markersize=3, mec='none')
 
     data = np.asarray(data)
     ax.plot([0, 360], [0, 360], linestyle='--', color=rgb.tue_darkgreen, alpha=1)
@@ -606,8 +607,8 @@ def plot_heading_pred(data, path):
 
 def plot_heading_err(data, path):
     data = np.asarray(data)  # shape (N, 2): [gt_heading, pred_heading], both in [0, 1)
-    gt = data[:, 0] * 360
-    pred = data[:, 1] * 360
+    gt = data[:, 0]
+    pred = data[:, 1]
 
     # Compute angular error
     diff = np.abs(gt - pred)
@@ -617,10 +618,13 @@ def plot_heading_err(data, path):
     bins = np.linspace(0, 360, 9)
     bin_centers = (bins[:-1] + bins[1:]) / 2
     bin_errors = []
+    sample_counts = []
 
     for i in range(8):
-        mask = (gt >= bins[i]) & (gt < bins[i+1])
-        if np.any(mask):
+        mask = (gt >= bins[i]) & (gt < bins[i + 1])
+        count = np.sum(mask)
+        sample_counts.append(count)
+        if count > 0:
             mean_error = angular_error[mask].mean()
         else:
             mean_error = 0
@@ -628,11 +632,19 @@ def plot_heading_err(data, path):
 
     # Plot
     plt.figure()
-    plt.bar(bin_centers, bin_errors, width=40, align='center', color='steelblue', edgecolor='black')
+    bars = plt.bar(bin_centers, bin_errors, width=30, align='center', color='darkgreen')
     plt.xlabel("Ground Truth Heading (deg)")
     plt.ylabel("Mean Angular Error (deg)")
     plt.xticks(bins)
-    plt.grid(True, linestyle='--', alpha=0.5)
+
+    # Sample count über jedem Balken anzeigen
+    for bar, count in zip(bars, sample_counts):
+        height = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width() / 2, height + 1, str(count),
+                 ha='center', va='bottom', fontsize=9)
+
     plt.tight_layout()
     plt.savefig(path)
+
+
 

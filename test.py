@@ -7,6 +7,7 @@ from threading import Thread
 import numpy as np
 import torch
 import yaml
+from sympy.integrals.meijerint_doc import category
 from tqdm import tqdm
 from collections import defaultdict
 from models.experimental import attempt_load
@@ -414,11 +415,14 @@ def test(data,
     # heading error
     total_head_error = 0.0
     count = 0
-    for class_id, errors in head_errors_per_cat.items():
-        for entry in errors:
-            _, heading_error, _, _ = entry
-            total_head_error += heading_error
-            count += 1
+    for head_errors_per_cat in head_errors:
+        if head_errors_per_cat:
+            category_dict = head_errors_per_cat[0]
+            for class_id, errors in category_dict.items():
+                for entry in errors:
+                    _, heading_error, _, _ = entry
+                    total_head_error += heading_error
+                    count += 1
     mean_heading_error = total_head_error / count if count > 0 else 0.0
     mean_heading_error_normalized = mean_heading_error / 180
 
@@ -441,18 +445,19 @@ def test(data,
         print("No bounding boxes matched --> no distance error")
 
     # Print the overall results
-    print("Total Samples: ", samples)
+    print("\nTotal Samples: ", samples)
     print("Overall weighted_rel_dist_err_boat =", overall_weighted_mean_dist_err_boat)
-    print("Overall abs_mean_dist_err_boat =", mean_abs_dist_err_boat)#
-    print(f"Mean heading error = {mean_heading_error}%.1f degrees")
+    print("Overall abs_mean_dist_err_boat =", mean_abs_dist_err_boat)
+    print(f"\nMean heading error = {mean_heading_error:.1f} degrees")
     print("Combined Metric (MAP & distance) = ", combined_metric)
     print("Combined_metric (MAP, distance & heading) = ", combined_metric_with_head)
     metrics_overall_distance = {}
     metrics_overall_distance["metrics/weighted_rel_dist_err_boat"] = overall_weighted_mean_dist_err_boat
     metrics_overall_distance["metrics/abs_mean_dist_err_boat"] = mean_abs_dist_err_boat
-    metrics_overall_distance["metrics/combined_metric"] = combined_metric
+    metrics_overall_distance["metrics/combined_metric_mapD"] = combined_metric
     metrics_heading = {}
     metrics_heading["metrics/mean_head_err"] = mean_heading_error
+    metrics_heading["metrics/combined_metric_mapDH"] = combined_metric_with_head
     if not wandb_logger is None:
         wandb_logger.log(metrics_overall_distance)
         wandb_logger.log(metrics_heading)
@@ -534,21 +539,20 @@ def test(data,
 
     dist_err = 1 - min(overall_weighted_mean_dist_err_boat, 1)
     print(f"\nresults:\nmp: {mp}\nmr: {mr}\nmap50: {map50}\nmap: {map}\ndist err: {dist_err}"
-          f"\ncombined metric: {combined_metric}\nlosses: {(loss.cpu() / len(dataloader)).tolist()}")
-    return (mp, mr, map50, map,  dist_err, combined_metric,
+          f"\ncombined metric: {combined_metric}\nlosses: {(loss.cpu() / len(dataloader)).tolist()}", combined_metric,
             *(loss.cpu() / len(dataloader)).tolist()), maps, t
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='test.py')
-    parser.add_argument('--weights', nargs='+', type=str, default='yolov7.pt', help='model.pt path(s)')
-    parser.add_argument('--data', type=str, default='data/coco.yaml', help='*.data path')
-    parser.add_argument('--batch-size', type=int, default=32, help='size of each image batch')
-    parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
+    parser.add_argument('--weights', nargs='+', type=str, default='../runs/train/yolov7_dist_head/weights/best.pt', help='model.pt path(s)')
+    parser.add_argument('--data', type=str, default='data/distHeadData.yaml', help='*.data path')
+    parser.add_argument('--batch-size', type=int, default=4, help='size of each image batch')
+    parser.add_argument('--img-size', type=int, default=1024, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.001, help='object confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.65, help='IOU threshold for NMS')
     parser.add_argument('--task', default='val', help='train, val, test, speed or study')
-    parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
+    parser.add_argument('--device', default='0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--single-cls', action='store_true', help='treat as single-class dataset')
     parser.add_argument('--augment', action='store_true', help='augmented inference')
     parser.add_argument('--verbose', action='store_true', help='report mAP by class')
@@ -557,7 +561,7 @@ if __name__ == '__main__':
     parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
     parser.add_argument('--save-json', action='store_true', help='save a cocoapi-compatible JSON results file')
     parser.add_argument('--project', default='runs/test', help='save to project/name')
-    parser.add_argument('--name', default='exp', help='save to project/name')
+    parser.add_argument('--name', default='distHead', help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--no-trace', action='store_true', help='don`t trace model')
     parser.add_argument('--v5-metric', action='store_true', help='assume maximum recall as 1.0 in AP calculation')
