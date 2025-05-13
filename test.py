@@ -184,6 +184,7 @@ def test(data,
                 max_heading = 360
                 loss_targets[:, -1] /= max_heading
 
+                # compute val losses
                 L = compute_loss([x.float() for x in train_out], loss_targets)[1][:5]  # box, obj, cls, dist, heading
                 loss += L
 
@@ -539,7 +540,9 @@ def test(data,
 
     dist_err = 1 - min(overall_weighted_mean_dist_err_boat, 1)
     print(f"\nresults:\nmp: {mp}\nmr: {mr}\nmap50: {map50}\nmap: {map}\ndist err: {dist_err}"
-          f"\ncombined metric: {combined_metric}\nlosses: {(loss.cpu() / len(dataloader)).tolist()}", combined_metric,
+          f"\ncombined metric: {combined_metric}\nlosses: {(loss.cpu() / len(dataloader)).tolist()}")
+    # calculate mean losses (currently summed over all batches)
+    return (mp, mr, map50, map, dist_err, combined_metric,
             *(loss.cpu() / len(dataloader)).tolist()), maps, t
 
 
