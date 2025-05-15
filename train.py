@@ -440,7 +440,7 @@ def train(hyp, opt, device, tb_writer=None):
             # Write
             with open(results_file, 'a') as f:
                 #print("results:" + str(results))
-                f.write(s + '%10.4g' * len(results) % results + '\n')  # append metrics, val_loss
+                f.write(s + '%10.6g' * len(results) % results + '\n')  # append metrics, val_loss
             if len(opt.name) and opt.bucket:
                 os.system('gsutil cp %s gs://%s/results/results%s.txt' % (results_file, opt.bucket, opt.name))
 
@@ -468,6 +468,7 @@ def train(hyp, opt, device, tb_writer=None):
                 early_stop_counter += 1
                 if early_stop_counter >= early_stop_patience:
                     logger.info(f'Early stopping possible at epoch {epoch} due to no improvement in {early_stop_counter} epochs.')
+                    #break
 
             wandb_logger.end_epoch(best_result=best_fitness == fi)
 

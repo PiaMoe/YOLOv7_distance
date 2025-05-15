@@ -414,13 +414,15 @@ def plot_results_overlay(start=0, stop=0):  # from utils.plots import *; plot_re
         fig.savefig(f.replace('.txt', '.png'), dpi=200)
 
 
-def plot_results(start=0, stop=0, bucket='', id=(), labels=(), save_dir=''):
+def plot_results(start=0, stop=0, bucket='', id=(), labels=(), save_dir='', results_dir=''):
     # Plot training 'results*.txt'. from utils.plots import *; plot_results(save_dir='runs/train/exp')
     fig, ax = plt.subplots(3, 4, figsize=(10, 8), tight_layout=True)
     ax = ax.ravel()
     s = ['Box', 'Objectness', 'Distance', 'Heading', 'Precision', 'Recall', 'mAP@0.5', 'mAP@0.5:0.95',
          'val Box', 'val Objectness', 'val Distance', 'val Heading']
-    if bucket:
+    if results_dir:
+        files = [Path(results_dir)]
+    elif bucket:
         # files = ['https://storage.googleapis.com/%s/results%g.txt' % (bucket, x) for x in id]
         files = ['results%g.txt' % x for x in id]
         c = ('gsutil cp ' + '%s ' * len(files) + '.') % tuple('gs://%s/results%g.txt' % (bucket, x) for x in id)
@@ -645,6 +647,11 @@ def plot_heading_err(data, path):
 
     plt.tight_layout()
     plt.savefig(path)
+
+
+if __name__ == '__main__':
+    plot_results(save_dir='../', results_dir='../../runs/train/headingDefault/results.txt')
+
 
 
 
