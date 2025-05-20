@@ -184,9 +184,10 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
                     # labels[:, -1] = np.log(labels[:, -1] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
 
                 color = colors[cls % len(colors) + 1]
-                cls = names[cls] if names else cls
+                # no class name but number
+                #cls = names[cls] if names else cls
                 if labels or conf[j] > 0.25:  # 0.25 conf thresh
-                    label = '%s %.1f %.1f' % (cls, dist, heading) if labels else '%s %.1f %.1f %.1f' % (cls, conf[j], dist, heading)
+                    label = '%i %.1f %.1f' % (cls, dist, heading) if labels else '%i %.1f %.1f %.1f' % (cls, conf[j], dist, heading)
                     plot_one_box(box, mosaic, label=label, color=color, line_thickness=tl)
 
         # Draw image filename labels
@@ -650,7 +651,7 @@ def plot_heading_err(data, path):
 
 
 if __name__ == '__main__':
-    plot_results(save_dir='../', results_dir='../../runs/train/headingDefault/results.txt')
+    plot_results(save_dir='../', results_dir='../../runs/train/BOArDING_standard/results.txt')
 
 
 

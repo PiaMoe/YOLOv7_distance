@@ -18,7 +18,10 @@ def angular_error(pred, target):
     return torch.mean(L)
 
 def cos_error(pred, target):
-    return 1 - torch.cos(pred - target)
+    pred_rad = pred * 2 * torch.pi
+    target_rad = target * 2 * torch.pi
+    L = 1 - torch.cos(pred_rad - target_rad)
+    return torch.mean(L)
 
 def sin_cos_error(pred, target):
     # loss = (pred_sin - true_sin)**2 + (pred_cos - true_cos)**2
@@ -514,7 +517,7 @@ class ComputeLoss:
                 # Heading loss
                 valid_head_mask = heading != -1    # filter out missing ground truth values
                 if valid_head_mask.any():
-                    ang_error = angular_error(phead[valid_head_mask], heading[valid_head_mask])
+                    ang_error = cos_error(phead[valid_head_mask], heading[valid_head_mask])
                     lhead += ang_error
 
 
