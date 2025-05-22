@@ -186,6 +186,7 @@ def test(data,
 
                 # compute val losses
                 L = compute_loss([x.float() for x in train_out], loss_targets)[1][:5]  # box, obj, cls, dist, heading
+                L = torch.round(L * 1e4) / 1e4
                 loss += L
 
             # Run NMS
@@ -539,6 +540,7 @@ def test(data,
         maps[c] = ap[i]
 
     dist_err = 1 - min(overall_weighted_mean_dist_err_boat, 1)
+    dist_err = round(dist_err, 4)
     print(f"\nresults:\nmp: {mp}\nmr: {mr}\nmap50: {map50}\nmap: {map}\ndist err: {dist_err}"
           f"\ncombined metric: {combined_metric}\nlosses: {(loss.cpu() / len(dataloader)).tolist()}")
     # calculate mean losses (currently summed over all batches)
@@ -548,8 +550,8 @@ def test(data,
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='test.py')
-    parser.add_argument('--weights', nargs='+', type=str, default='../runs/train/yolov7_dist_head/weights/best.pt', help='model.pt path(s)')
-    parser.add_argument('--data', type=str, default='data/distHeadData.yaml', help='*.data path')
+    parser.add_argument('--weights', nargs='+', type=str, default='../runs/train/BOArDING_standard/weights/best.pt', help='model.pt path(s)')
+    parser.add_argument('--data', type=str, default='data/debug_data.yaml', help='*.data path')
     parser.add_argument('--batch-size', type=int, default=4, help='size of each image batch')
     parser.add_argument('--img-size', type=int, default=1024, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.001, help='object confidence threshold')
