@@ -57,8 +57,7 @@ def butter_lowpass_filtfilt(data, cutoff=1500, fs=50000, order=5):
     b, a = butter_lowpass(cutoff, fs, order=order)
     return filtfilt(b, a, data)  # forward-backward filter
 
-
-def plot_one_box(x, img, color=None, label=None, line_thickness=3, textcolor = [255, 255, 255]):
+def plot_one_box(x, img, color=None, label=None, heading=None, line_thickness=3, textcolor = [255, 255, 255]):
     # Plots one bounding box on image img
     tl = line_thickness or round(0.002 * (img.shape[0] + img.shape[1]) / 2) + 1  # line/font thickness
     color = color or [random.randint(0, 255) for _ in range(3)]
@@ -70,6 +69,22 @@ def plot_one_box(x, img, color=None, label=None, line_thickness=3, textcolor = [
         c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3
         cv2.rectangle(img, c1, c2, color, -1, cv2.LINE_AA)  # filled
         cv2.putText(img, label, (c1[0], c1[1] - 2), 0, tl / 3, textcolor, thickness=tf, lineType=cv2.LINE_AA)
+    if heading:
+        # Plots arrow pointing in heading direction
+        center_x = int((x[0] + x[2]) / 2)
+        center_y = int((x[1] + x[3]) / 2)
+        rad = math.radians(heading)
+        box_w = abs(x[2] - x[0])
+        box_h = abs(x[3] - x[1])
+        box_diag = math.sqrt(box_w ** 2 + box_h ** 2)
+        # dynamic size, but limited
+        img_diag = math.sqrt(img.shape[0] ** 2 + img.shape[1] ** 2)
+        arrow_length = max(0.03 * img_diag, min(0.15 * img_diag, box_diag * 0.5))
+        # calculate direction
+        end_x = int(center_x + arrow_length * math.sin(rad))
+        end_y = int(center_y + arrow_length * math.cos(rad))
+        cv2.arrowedLine(img, (center_x, center_y), (end_x, end_y), color, thickness=tl, line_type=cv2.LINE_AA,
+                        tipLength=0.2)
 
 
 def plot_one_box_PIL(box, img, color=None, label=None, line_thickness=None):
@@ -651,7 +666,7 @@ def plot_heading_err(data, path):
 
 
 if __name__ == '__main__':
-    plot_results(save_dir='../', results_dir='../../runs/train/BOArDING_standard/results.txt')
+    plot_results(save_dir='../', results_dir='../../runs/train/BOArDING_cosLoss/results.txt')
 
 
 

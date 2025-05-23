@@ -121,29 +121,29 @@ def detect(save_img=False):
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
 
                 # Print results
-                for c in det[:, -2].unique():
-                    n = (det[:, -2] == c).sum()  # detections per class
+                for c in det[:, -3].unique():
+                    n = (det[:, -3] == c).sum()  # detections per class
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
                 # Write results
-                for *xyxy, conf, cls, distance in reversed(det):
+                for *xyxy, conf, cls, distance, heading in reversed(det):
                     if save_txt:  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                        line = (cls, *xywh, conf, distance) if opt.save_conf else (cls, *xywh, distance)  # label format
+                        line = (cls, *xywh, conf, distance, heading) if opt.save_conf else (cls, *xywh, distance, heading)  # label format
                         with open(txt_path + '.txt', 'a') as f:
                             f.write(('%g ' * len(line)).rstrip() % line + '\n')
 
                     if save_img or view_img:  # Add bbox to image
                         # label = f'{names[int(cls)]} {conf:.2f} {max(0,min(distance*1000,1000)):.2f}'
                         # label = f'{names[int(cls)]} {conf:.2f} {max(0,min(distance,1000)):.1f}'
-                        label = f'{names[int(cls)]} {conf:.2f} {distance:.1f}' # i believe clipping is taken care of in inference yolo, distance
+                        label = f'{names[int(cls)]} {conf:.2f} {distance:.1f} {heading:.1f}' # i believe clipping is taken care of in inference yolo, distance
                         color = get_color_based_on_distance(distance)
                         # plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
                         if color == (0, 250, 250):
                             txtcolor = [0, 0, 0]
                         else:
                             txtcolor = [255,255,255]
-                        plot_one_box(xyxy, im0, label=label, color=color, line_thickness=1, textcolor=txtcolor)
+                        plot_one_box(xyxy, im0, label=label, color=color, line_thickness=1, textcolor=txtcolor, heading=heading)
 
             # Print time (inference + NMS)
             print(f'{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS')
