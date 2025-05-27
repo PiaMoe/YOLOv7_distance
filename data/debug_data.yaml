@@ -1,7 +1,7 @@
 #yaml file for YOLOv7
 train: /home/pmoessner/data/debug_data/train/images
 test: /home/pmoessner/data/debug_data/test/images
-val: /home/pmoessner/data/debug_data/test/images
+val: /home/pmoessner/data/debug_data/val/images
 
 nc: 1
 names: ['boat']
