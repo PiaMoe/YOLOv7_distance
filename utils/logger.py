@@ -19,7 +19,7 @@ def log_predictions(tensor, epoch, batch_i, output_dir, sample_prob=0.001, col_n
         batch_i (int): Batch index
         output_dir (str): Directory for CSV files
         sample_prob (float): Sampling probability (e.g., 0.01 = 1%)
-        col_names (list[str]): Optional, e.g., ["x", "y", "w", "h", "obj", "class_logits", "distance", "heading"]
+        col_names (list[str]): Optional, e.g., ["x", "y", "w", "h", "obj", "class_logits", "distance", "cosH", "sinH"]
     """
 
     os.makedirs(output_dir, exist_ok=True)
@@ -55,13 +55,13 @@ def safe_read_csv(file):
             # Spalten durch Trennzeichen erkennen
             sep = "\t" if "\t" in line else ","
             parts = line.strip().split(sep)
-            if len(parts) == 8:
+            if len(parts) == 9:
                 try:
                     if float(parts[0]) < 200:
                         rows.append([float(x) for x in parts])
                 except ValueError:
                     continue  # überspringt Zeile mit nicht-konvertierbarem Wert
-    return pd.DataFrame(rows, columns=["x", "y", "w", "h", "obj", "class_0", "distance", "heading"])
+    return pd.DataFrame(rows, columns=["x", "y", "w", "h", "obj", "class_0", "distance", "cosH", "sinH"])
 
 
 def evaluate_logs(csv_dir):
@@ -95,12 +95,12 @@ def evaluate_logs(csv_dir):
     for epoch, df in epoch_data.items():
         print(f"Epoche {epoch}: {len(df)} gültige Einträge")
 
-        fig, axes = plt.subplots(2, 4, figsize=(16, 8))
+        fig, axes = plt.subplots(3, 3, figsize=(16, 8))
         fig.suptitle(f"Verteilung der Vorhersagen – Epoche {epoch}", fontsize=16)
 
-        columns = ["x", "y", "w", "h", "obj", "class_0", "distance", "heading"]
+        columns = ["x", "y", "w", "h", "obj", "class_0", "distance", "cosH", "sinH"]
         for i, column in enumerate(columns):
-            ax = axes[i // 4, i % 4]
+            ax = axes[i // 3, i % 3]
             df[column].hist(bins=50, ax=ax)
             ax.set_title(column)
             ax.set_xlabel(column)

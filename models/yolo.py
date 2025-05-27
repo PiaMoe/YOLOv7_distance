@@ -31,9 +31,8 @@ class Detect(nn.Module):
         super(Detect, self).__init__()
         self.normalization_strategy = hyp["normalization_strategy"]
         self.max_distance = hyp["max_distance"]
-        self.max_head_deg = 360
         self.nc = nc  # number of classes
-        self.no = nc + 5 + 1 + 1 # number of outputs per anchor + 1 for distance + 1 for heading
+        self.no = nc + 5 + 1 + 2 # number of outputs per anchor + 1 for distance + 2 for heading
         self.nl = len(anchors)  # number of detection layers
         self.na = len(anchors[0]) // 2  # number of anchors
         self.grid = [torch.zeros(1)] * self.nl  # init grid
@@ -54,40 +53,30 @@ class Detect(nn.Module):
             if not self.training:  # inference
                 if self.grid[i].shape[2:4] != x[i].shape[2:4]:
                     self.grid[i] = self._make_grid(nx, ny).to(x[i].device)
-                y = x[i].clone()  # avoid modifying x directly
-                # y[..., :-1] = y[..., :-1].sigmoid()
-                #experimentally, set everything to sigmoid, even distances..
-                y = y.sigmoid()
-                # y = x[i].sigmoid()
 
+                y = x[i].clone()  # don't modify x directly
+
+                # apply sigmoid only to relevant parts
+                y[..., 0:4] = y[..., 0:4].sigmoid()  # xywh
+                y[..., 4:4 + self.nc] = y[..., 4:4 + self.nc].sigmoid()  # class scores
+                y[..., -3] = y[..., -3].sigmoid()  # distance
+
+                # normalize cos/sin
+                cos_sin = y[..., -2:]
+                cos_sin = F.normalize(cos_sin, dim=-1)
+                y[..., -2:] = cos_sin
 
                 if not torch.onnx.is_in_onnx_export():
                     y[..., 0:2] = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy
                     y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
-                    if self.normalization_strategy == "log":
-                        # print("taking log strategy")
-                        y[..., -2] = (y[..., -2] ) * np.log(self.max_distance)
-                        y[..., -2] = torch.exp(y[..., -2]) - 1
-                    elif self.normalization_strategy == "log_negative":
-                        y[..., -2] = (y[..., -2] + 0.5) * np.log(self.max_distance)
-                        y[..., -2] = torch.exp(y[..., -2]) - 1
-                    elif self.normalization_strategy == "linear":
-                        y[..., -2] = (y[..., -2]) * self.max_distance
-                    elif self.normalization_strategy == "linear_negative":
-                        y[..., -2] = (y[..., -2] + 0.5) * self.max_distance
-                    else:
-                        raise ValueError("no normalization strategy defined")
-                    y[..., -2] = torch.clip(y[..., -2], 0, self.max_distance)
-                    y[..., -1] = torch.clip(y[..., -1], 0, self.max_head_deg)
+                    y[..., -3] = self.rescale_dist(y[..., -3])  # rescale dist based on norm strategy
                 else:
-                    xy, wh, conf, dist, heading = y.split((2, 2, self.nc + 1 + 1, 1), 4)  # y.tensor_split((2, 4, 5), 4)  # torch 1.8.0
+                    xy, wh, conf, dist, cosH, sinH = y.split((2, 2, self.nc + 1 + 2, 1), 4)  # y.tensor_split((2, 4, 5), 4)  # torch 1.8.0
                     xy = xy * (2. * self.stride[i]) + (self.stride[i] * (self.grid[i] - 0.5))  # new xy
                     wh = wh ** 2 * (4 * self.anchor_grid[i].data)  # new wh
 
                     dist = dist * self.max_distance     # at the moment we only support Linear normalization for ONNX exports in Detect -> Use IDetect instead
-                    heading = heading * self.max_head_deg
-
-                    y = torch.cat((xy, wh, conf, dist, heading), 5)
+                    y = torch.cat((xy, wh, conf, dist, cosH, sinH), 6)
                 z.append(y.view(bs, -1, self.no))
 
         if self.training:
@@ -140,9 +129,8 @@ class IDetect(nn.Module):
             self.normalization_strategy = "linear"
             self.max_distance = 1000
 
-        self.max_head_deg = 360
         self.nc = nc  # number of classes
-        self.no = nc + 5 + 1 + 1 # number of outputs per anchor +1 for distance +1 for heading
+        self.no = nc + 5 + 1 + 2 # number of outputs per anchor +1 for distance +2 for heading
         self.nl = len(anchors)  # number of detection layers
         self.na = len(anchors[0]) // 2  # number of anchors
         self.grid = [torch.zeros(1)] * self.nl  # init grid
@@ -154,6 +142,7 @@ class IDetect(nn.Module):
         self.ia = nn.ModuleList(ImplicitA(x) for x in ch)
         self.im = nn.ModuleList(ImplicitM(self.no * self.na) for _ in ch)
 
+        # used for logging
         self.epoch = 1
         self.batch = 1
 
@@ -172,15 +161,26 @@ class IDetect(nn.Module):
             # log model outputs
             raw = x[i].detach().cpu()  # shape: (bs, na, ny, nx, no)
             log_predictions(raw, self.epoch, self.batch_i, output_dir="preds/", sample_prob=0.01, col_names=["x", "y", "w", "h", "obj", "class_0", "distance", "heading"])
+
             if not self.training:  # inference
                 if self.grid[i].shape[2:4] != x[i].shape[2:4]:
                     self.grid[i] = self._make_grid(nx, ny).to(x[i].device)
 
-                y = x[i].sigmoid()
+                y = x[i].clone()  # don't modify x directly
+
+                # apply sigmoid only to relevant parts
+                y[..., 0:4] = y[..., 0:4].sigmoid()  # xywh
+                y[..., 4:4 + self.nc] = y[..., 4:4 + self.nc].sigmoid()  # class scores
+                y[..., -3] = y[..., -3].sigmoid()  # distance
+
+                # normalize cos/sin
+                cos_sin = y[..., -2:]
+                cos_sin = F.normalize(cos_sin, dim=-1)
+                y[..., -2:] = cos_sin
+
                 y[..., 0:2] = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy
                 y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
-                y[..., -2] = self.rescale_dist(y[..., -2])  # rescale dist based on norm strategy
-                y[..., -1] = self.rescale_heading(y[..., -1])
+                y[..., -3] = self.rescale_dist(y[..., -3])  # rescale dist based on norm strategy
                 z.append(y.view(bs, -1, self.no))
 
         return x if self.training else (torch.cat(z, 1), x)
@@ -202,12 +202,6 @@ class IDetect(nn.Module):
 
         return rescaled_dist
 
-    def rescale_heading(self, heading_pred_normalized):
-        # TODO: heading rescaling
-        rescaled_heading = heading_pred_normalized * self.max_head_deg
-        rescaled_heading = torch.clip(rescaled_heading, 0, self.max_head_deg)
-        return rescaled_heading
-
 
     def fuseforward(self, x):
         # x = x.copy()  # for profiling
@@ -222,19 +216,23 @@ class IDetect(nn.Module):
                 if self.grid[i].shape[2:4] != x[i].shape[2:4]:
                     self.grid[i] = self._make_grid(nx, ny).to(x[i].device)
 
-                y = x[i].sigmoid()
+                y = x[i].clone()  # don't modify x directly
+
+                # apply sigmoid only to relevant parts
+                y[..., 0:4] = y[..., 0:4].sigmoid()  # xywh
+                y[..., 4:4 + self.nc] = y[..., 4:4 + self.nc].sigmoid()  # class scores
+                y[..., -3] = y[..., -3].sigmoid()  # distance
+
                 if not torch.onnx.is_in_onnx_export():
                     y[..., 0:2] = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy
                     y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
-                    y[..., -2] = self.rescale_dist(y[..., -2])  # rescale dist based on norm strategy
-                    y[..., -1] = self.rescale_heading(y[..., -1])
+                    y[..., -3] = self.rescale_dist(y[..., -3])  # rescale dist
                 else:
-                    xy, wh, conf, dist, heading = y.split((2, 2, self.nc + 1 + 1, 1), 4)  # y.tensor_split((2, 4, 5), 4)  # torch 1.8.0
+                    xy, wh, conf, dist, cosH, sinH = y.split((2, 2, self.nc + 1 + 2, 1), 4)  # y.tensor_split((2, 4, 5), 4)  # torch 1.8.0
                     xy = xy * (2. * self.stride[i]) + (self.stride[i] * (self.grid[i] - 0.5))  # new xy
                     wh = wh ** 2 * (4 * self.anchor_grid[i].data)  # new wh
                     dist = self.rescale_dist(dist)
-                    heading = self.rescale_heading(heading)
-                    y = torch.cat((xy, wh, conf, dist, heading), 5)
+                    y = torch.cat((xy, wh, conf, dist, cosH, sinH), 5)
                 z.append(y.view(bs, -1, self.no))
 
         if self.training:
@@ -273,15 +271,16 @@ class IDetect(nn.Module):
         z = torch.cat(z, 1)
         box = z[:, :, :4]
         conf = z[:, :, 4:5]
-        score = z[:, :, 5:-2]
-        dist = z[:, :, -2]
-        heading = z[:, :, -1]
+        score = z[:, :, 5:-3]
+        dist = z[:, :, -3]
+        cosH = z[:, :, -2]
+        sinH = z[:, :, -1]
         score *= conf
         convert_matrix = torch.tensor([[1, 0, 1, 0], [0, 1, 0, 1], [-0.5, 0, 0.5, 0], [0, -0.5, 0, 0.5]],
                                            dtype=torch.float32,
                                            device=z.device)
         box @= convert_matrix
-        return (box, score, dist, heading)
+        return (box, score, dist, cosH, sinH)
 
 
 class IKeypoint(nn.Module):

@@ -5,6 +5,7 @@ import math
 import os
 import random
 from copy import copy
+from math import atan2
 from pathlib import Path
 
 import cv2
@@ -122,11 +123,11 @@ def plot_wh_methods():  # from utils.plots import *; plot_wh_methods()
 
 
 def output_to_target(output):
-    # Convert model output to target format [batch_id, class_id, x, y, w, h, conf]
+    # Convert model output to target format [batch_id, class_id, x, y, w, h, conf, dist, cosh, sinh]
     targets = []
     for i, o in enumerate(output):
-        for *box, conf, cls, dist, heading in o.cpu().numpy():
-            targets.append([i, cls, *list(*xyxy2xywh(np.array(box)[None])), conf, dist, heading])
+        for *box, conf, cls, dist, cosh, sinh in o.cpu().numpy():
+            targets.append([i, cls, *list(*xyxy2xywh(np.array(box)[None])), conf, dist, cosh, sinh])
     return np.array(targets)
 
 
@@ -172,9 +173,10 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
             image_targets = targets[targets[:, 0] == i]
             boxes = xywh2xyxy(image_targets[:, 2:6]).T
             classes = image_targets[:, 1].astype('int')
-            distances = image_targets[:, -2]
-            headings = image_targets[:, -1]
-            labels = image_targets.shape[1] == 6+2  # labels if no conf column (+2 bc of distance & heading)
+            distances = image_targets[:, -3]
+            cosines = image_targets[:, -2]
+            sines = image_targets[:, -1]
+            labels = image_targets.shape[1] == 6+3  # labels if no conf column (+3 bc of distance & heading)
             conf = None if labels else image_targets[:, 6]  # check for confidence presence (label vs pred)
 
             if boxes.shape[1]:
@@ -188,7 +190,11 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
             for j, box in enumerate(boxes.T):
                 cls = int(classes[j])
                 dist = distances[j]
-                heading = headings[j]
+                cosh = cosines[j]
+                sinh = sines[j]
+                heading_rad = np.arctan2(sinh, cosh)  # in radians [-π, π]
+                heading_deg = np.degrees(heading_rad) % 360  # wrap to [0, 360)
+                heading = heading_deg
                 #TODO change in dataset.py as well if you change here and vice versa distances
                 if labels:
                     pass
@@ -432,10 +438,10 @@ def plot_results_overlay(start=0, stop=0):  # from utils.plots import *; plot_re
 
 def plot_results(start=0, stop=0, bucket='', id=(), labels=(), save_dir='', results_dir=''):
     # Plot training 'results*.txt'. from utils.plots import *; plot_results(save_dir='runs/train/exp')
-    fig, ax = plt.subplots(3, 4, figsize=(10, 8), tight_layout=True)
+    fig, ax = plt.subplots(2, 7, figsize=(14, 4), tight_layout=True)
     ax = ax.ravel()
-    s = ['Box', 'Objectness', 'Distance', 'Heading', 'Precision', 'Recall', 'mAP@0.5', 'mAP@0.5:0.95',
-         'val Box', 'val Objectness', 'val Distance', 'val Heading']
+    s = ['Box', 'Objectness', 'Distance', 'cosH', 'sinH', 'Precision', 'Recall', 'mAP@0.5', 'mAP@0.5:0.95',
+         'val Box', 'val Objectness', 'val Distance', 'val cosH', 'val sinH']
     if results_dir:
         files = [Path(results_dir)]
     elif bucket:
@@ -448,10 +454,10 @@ def plot_results(start=0, stop=0, bucket='', id=(), labels=(), save_dir='', resu
     assert len(files), 'No results.txt files found in %s, nothing to plot.' % os.path.abspath(save_dir)
     for fi, f in enumerate(files):
         try:
-            results = np.loadtxt(f, usecols=[2, 3, 5, 6, 10, 11, 12, 13, 16, 17, 19, 20], ndmin=2).T
+            results = np.loadtxt(f, usecols=[2, 3, 5, 6, 7, 11, 12, 13, 14, 17, 18, 20, 21, 22], ndmin=2).T
             n = results.shape[1]  # number of rows
             x = range(start, min(stop, n) if stop else n)
-            for i in range(12):
+            for i in range(14):
                 y = results[i, x]
                 if i in [0, 1, 2, 5, 6, 7]:
                     y[y == 0] = np.nan  # don't show zero loss values

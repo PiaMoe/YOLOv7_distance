@@ -12,7 +12,6 @@ def smooth_BCE(eps=0.1):  # https://github.com/ultralytics/yolov3/issues/238#iss
     # return positive, negative label smoothing BCE targets
     return 1.0 - 0.5 * eps, 0.5 * eps
 
-# TODO: which loss function for heading
 def angular_error(pred, target):
     L = torch.min(torch.abs(pred - target), 1 - torch.abs(pred - target))
     return torch.mean(L)
@@ -23,10 +22,18 @@ def cos_error(pred, target):
     L = 1 - torch.cos(pred_rad - target_rad)
     return torch.mean(L)
 
-def sin_cos_error(pred, target):
-    # loss = (pred_sin - true_sin)**2 + (pred_cos - true_cos)**2
-    return (torch.cos(pred)-torch.cos(target))**2 + (torch.sin(pred)-torch.sin(target))**2
+def sin_cos_MSE(pred, target):
+    pred_norm = F.normalize(pred, dim=-1)
+    target_norm = F.normalize(target, dim=-1)
+    L = (pred_norm - target_norm) ** 2
+    return torch.mean(L)
 
+def sin_cos_angular_error(pred, target):
+    pred = F.normalize(pred, dim=-1)
+    target = F.normalize(target, dim=-1)
+    cos_sim = (pred * target).sum(dim=-1)  # batch-wise dot product
+    L = 1.0 - cos_sim  # equivalent to 1 - cos(Δθ)
+    return torch.mean(L)
 
 class BCEBlurWithLogitsLoss(nn.Module):
     # BCEwithLogitLoss() with reduced missing label effects.
@@ -469,16 +476,16 @@ class ComputeLoss:
         lcls, lbox, lobj = torch.zeros(1, device=device), torch.zeros(1, device=device), torch.zeros(1, device=device)
         ldist = torch.zeros(1, device=device)
         lhead = torch.zeros(1, device=device)
-        # detection_targets = targets[:, :-1]  # Exclude the distance
-        # distance_targets = targets[:, -1]  # Extract the distance
-        tcls, tbox, indices, anchors, distances, headings = self.build_targets(p, targets)  # targets
+        tcls, tbox, indices, anchors, distances, cosines, sines = self.build_targets(p, targets)  # targets
 
         # Losses
         for i, pi in enumerate(p):  # layer index, layer predictions
             b, a, gj, gi = indices[i]  # image, anchor, gridy, gridx
             tobj = torch.zeros_like(pi[..., 0], device=device)  # target obj
             distance = distances[i]
-            heading = headings[i]
+            cosh = cosines[i]
+            sinh = sines[i]
+            heading = torch.stack((cosh, sinh), dim=1)
             n = b.shape[0]  # number of targets
             if n:
                 ps = pi[b, a, gj, gi]  # prediction subset corresponding to targets
@@ -493,9 +500,8 @@ class ComputeLoss:
                 # Objectness
                 tobj[b, a, gj, gi] = (1.0 - self.gr) + self.gr * iou.detach().clamp(0).type(tobj.dtype)  # iou ratio
 
-
                 # predicted distance
-                pdist = ps[:, -2].sigmoid()  # assuming the second last element is distance, TODO currently with sigmoid
+                pdist = ps[:, -3].sigmoid()  # assuming the second last element is distance, TODO currently with sigmoid
                 # ldist += self.MSEdist(pdist, distance_targets[b, a, gj, gi])  # You need to ensure indices match here
                 # matched_distance_targets = distance_targets[b]  # This is likely incorrect; you need a correct method here
 
@@ -510,23 +516,19 @@ class ComputeLoss:
                 # loss_distance = torch.where((distance == 1) & (pdist > 1), torch.zeros_like(pdist), (pdist - distance))
                 # ldist += loss_distance.mean()
 
-                # TODO: normalize heading predictions?
-                # predicted heading
-                phead = ps[:, -1].sigmoid()  # last value is heading (normalized 0-1)
+                # predicted heading (normalization in loss function)
+                pheading = ps[:, -2:]
 
-                # Heading loss
-                valid_head_mask = heading != -1    # filter out missing ground truth values
-                if valid_head_mask.any():
-                    ang_error = cos_error(phead[valid_head_mask], heading[valid_head_mask])
-                    lhead += ang_error
-
+                # TODO: which loss for heading?
+                ang_error = sin_cos_MSE(pheading, heading)
+                lhead += ang_error
 
                 # Classification
                 if self.nc > 1:  # cls loss (only if multiple classes)
-                    t = torch.full_like(ps[:, 5:-2], self.cn, device=device)  # targets
+                    t = torch.full_like(ps[:, 5:-3], self.cn, device=device)  # targets
                     t[range(n), tcls[i]] = self.cp
                     #t[t==self.cp] = iou.detach().clamp(0).type(t.dtype)
-                    lcls += self.BCEcls(ps[:, 5:-2], t)  # BCE
+                    lcls += self.BCEcls(ps[:, 5:-3], t)  # BCE
 
                 # Append targets to text file
                 # with open('targets.txt', 'a') as file:
@@ -555,7 +557,7 @@ class ComputeLoss:
         # Build targets for compute_loss(), input targets(image,class,x,y,w,h)
         na, nt = self.na, targets.shape[0]  # number of anchors, targets
         tcls, tbox, indices, anch = [], [], [], []
-        gain = torch.ones(7+2, device=targets.device).long()  # normalized to gridspace gain + 2 because of distance and heading targets
+        gain = torch.ones(7+3, device=targets.device).long()  # normalized to gridspace gain + 3 because of distance and heading targets
         ai = torch.arange(na, device=targets.device).float().view(na, 1).repeat(1, nt)  # same as .repeat_interleave(nt)
         targets = torch.cat((targets.repeat(na, 1, 1), ai[:, :, None]), 2)  # append anchor indices
 
@@ -565,7 +567,8 @@ class ComputeLoss:
                             # [1, 1], [1, -1], [-1, 1], [-1, -1],  # jk,jm,lk,lm
                             ], device=targets.device).float() * g  # offsets
         distances=[]
-        headings=[]
+        cosines=[]
+        sines=[]
         for i in range(self.nl):
             anchors = self.anchors[i]
             gain[2:6] = torch.tensor(p[i].shape)[[3, 2, 3, 2]]  # xyxy gain
@@ -594,20 +597,21 @@ class ComputeLoss:
             # Define
             b, c = t[:, :2].long().T  # image, class
             distances.append(t[:,6])
-            headings.append(t[:,7])
+            cosines.append(t[:,7])
+            sines.append(t[:,8])
             gxy = t[:, 2:4]  # grid xy
             gwh = t[:, 4:6]  # grid wh
             gij = (gxy - offsets).long()
             gi, gj = gij.T  # grid xy indices
 
             # Append
-            a = t[:, 6+2].long()  # anchor indices, +2 bc of distances and headings
+            a = t[:, 6+3].long()  # anchor indices, +3 bc of distances and headings
             indices.append((b, a, gj.clamp_(0, gain[3] - 1), gi.clamp_(0, gain[2] - 1)))  # image, anchor, grid indices
             tbox.append(torch.cat((gxy - gij, gwh), 1))  # box
             anch.append(anchors[a])  # anchors
             tcls.append(c)  # class
 
-        return tcls, tbox, indices, anch, distances, headings
+        return tcls, tbox, indices, anch, distances, cosines, sines
 
 
 class ComputeLossOTA:

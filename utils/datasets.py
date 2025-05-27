@@ -511,19 +511,19 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                         l = np.array(l, dtype=np.float32)
 
                     if len(l):
-                        assert l.shape[1] == 7, 'labels require 7 columns each (5 plus one for distances and heading)'
+                        assert l.shape[1] == 8, 'labels require 7 columns each (5 plus one for distances and 2 for heading)'
                         # uncomment if all negative labels should be thrown away
-                        # currently: distance and heading can be negative but loss won't be computed
+                        # currently: distance can be negative but loss won't be computed, sin/cos can be negative
                         #assert (l >= 0).all(), 'negative labels'
-                        assert (l[:, 1:-2] >= 0).all(), 'negative bbox/label values'
-                        assert (l[:, 1:-2] <= 1).all(), 'non-normalized or out of bounds coordinate labels'
+                        assert (l[:, 1:-3] >= 0).all(), 'negative bbox/label values'
+                        assert (l[:, 1:-3] <= 1).all(), 'non-normalized or out of bounds coordinate labels'
                         assert np.unique(l, axis=0).shape[0] == l.shape[0], 'duplicate labels'
                     else:
                         ne += 1  # label empty
-                        l = np.zeros((0, 7), dtype=np.float32)
+                        l = np.zeros((0, 8), dtype=np.float32)
                 else:
                     nm += 1  # label missing
-                    l = np.zeros((0, 7), dtype=np.float32)
+                    l = np.zeros((0, 8), dtype=np.float32)
                 x[im_file] = [l, shape, segments]
             except Exception as e:
                 nc += 1
@@ -589,7 +589,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
 
             labels = self.labels[index].copy()
             if labels.size:  # normalized xywh to pixel xyxy format
-                labels[:, 1:-2] = xywhn2xyxy(labels[:, 1:-2], ratio[0] * w, ratio[1] * h, padw=pad[0], padh=pad[1])
+                labels[:, 1:-3] = xywhn2xyxy(labels[:, 1:-3], ratio[0] * w, ratio[1] * h, padw=pad[0], padh=pad[1])
 
         if self.augment:
             # print("Warning commented out random perspective augmentation")
@@ -625,7 +625,6 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                         break
                 labels = pastein(img, labels, sample_labels, sample_images, sample_masks)
 
-
         nL = len(labels)  # number of labels
         if nL:
             labels[:, 1:5] = xyxy2xywh(labels[:, 1:5])  # convert xyxy to xywh
@@ -634,30 +633,29 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             # if not self.prefix in ['val','test']:
             if self.traintestval == 'train':
                 max_distance = hyp["max_distance"]
-                max_head_deg = 360
 
                 # only normalize values that are not -1 to be able to filter out missing values later
-                valid_mask_d = labels[:, -2] != -1
-                valid_mask_h = labels[:, -1] != -1
+                valid_mask_d = labels[:, -3] != -1
 
                 # normalize distances based on strategy
-                labels[valid_mask_d, -2] = np.clip(labels[valid_mask_d, -2], 0, max_distance)
+                labels[valid_mask_d, -3] = np.clip(labels[valid_mask_d, -3], 0, max_distance)
                 if hyp["normalization_strategy"] == 'log':
-                    labels[valid_mask_d, -2] = np.log(labels[valid_mask_d, -2] + 1)
-                    labels[valid_mask_d, -2] /= np.log(max_distance)
+                    labels[valid_mask_d, -3] = np.log(labels[valid_mask_d, -3] + 1)
+                    labels[valid_mask_d, -3] /= np.log(max_distance)
                 elif hyp["normalization_strategy"] == 'log_negative':
-                    labels[valid_mask_d, -2] = np.log(labels[valid_mask_d, -2] + 1)
-                    labels[valid_mask_d, -2] = labels[valid_mask_d, -2] / np.log(max_distance) - 0.5
+                    labels[valid_mask_d, -3] = np.log(labels[valid_mask_d, -3] + 1)
+                    labels[valid_mask_d, -3] = labels[valid_mask_d, -3] / np.log(max_distance) - 0.5
                 elif hyp["normalization_strategy"] == 'linear':
-                    labels[valid_mask_d, -2] /= max_distance
+                    labels[valid_mask_d, -3] /= max_distance
                 elif hyp["normalization_strategy"] == 'linear_negative':
-                    labels[valid_mask_d, -2] = labels[valid_mask_d, -2] / max_distance - 0.5
+                    labels[valid_mask_d, -3] = labels[valid_mask_d, -3] / max_distance - 0.5
                 else:
                     raise ValueError("no normalization strategy defined")
 
-                # TODO: heading normalization
-                # normalize headings linearly
-                labels[valid_mask_h, -1] /= max_head_deg
+                # normalize sin/cos heading to unit circle
+                cos_sin = labels[..., -2:]
+                cos_sin = F.normalize(cos_sin, dim=-1)
+                labels[..., -2:] = cos_sin
 
 
         if self.augment:
@@ -673,7 +671,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                 if nL:
                     labels[:, 1] = 1 - labels[:, 1]
 
-        labels_out = torch.zeros((nL, 8))
+        labels_out = torch.zeros((nL, 9))
         # print("labels shape ", labels.shape)
         if nL:
             labels_out[:, 1:] = torch.from_numpy(labels)
