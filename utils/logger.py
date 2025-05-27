@@ -19,7 +19,7 @@ def log_predictions(tensor, epoch, batch_i, output_dir, sample_prob=0.001, col_n
     """
     os.makedirs(output_dir, exist_ok=True)
 
-    if epoch % 1 == 10 and batch_i % 4 == 0:
+    if epoch % 10 == 0 and batch_i % 4 == 0:
         bs, na, ny, nx, no = tensor.shape
         flat = tensor.view(bs * na * ny * nx, no)
 
