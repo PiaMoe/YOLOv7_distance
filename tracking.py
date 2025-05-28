@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 from pathlib import Path
 
-from boxmot import DeepOCSORT, StrongSORT, BoTSORT, BYTETracker, HybridSORT, OCSORT
+from boxmot import DeepOcSort, StrongSort, BotSort, ByteTrack, HybridSort, OcSort
 import argparse
 import time
 from pathlib import Path
@@ -109,7 +109,7 @@ def detect(save_img=False):
     #     use_byte=False,
     # )
     #best together with deepocsort and some config changes
-    tracker = HybridSORT(
+    tracker = HybridSort(
             # model_weights=Path('osnet_x0_25_msmt17.pt'),  # which ReID model to use
     reid_weights=Path('osnet_ain_x1_0_msmt17.pt'),  # which ReID model to use
     device='cuda:0',half=False, det_thresh=0.1,per_class=False, max_age=10, min_hits=3,
