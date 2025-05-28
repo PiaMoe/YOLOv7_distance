@@ -25,7 +25,7 @@ def cos_error(pred, target):
 def sin_cos_MSE(pred, target):
     pred_norm = F.normalize(pred, dim=-1)
     target_norm = F.normalize(target, dim=-1)
-    L = (pred_norm - target_norm) ** 2
+    L = torch.sum((pred_norm - target_norm) ** 2, dim=1)
     return torch.mean(L)
 
 def sin_cos_angular_error(pred, target):
@@ -516,11 +516,16 @@ class ComputeLoss:
                 # loss_distance = torch.where((distance == 1) & (pdist > 1), torch.zeros_like(pdist), (pdist - distance))
                 # ldist += loss_distance.mean()
 
-                # predicted heading (normalization in loss function)
-                pheading = ps[:, -2:]
+                # Build target heading vector
+                heading_vec = torch.stack((cosh, sinh), dim=1)
+                # Filter out invalid headings (e.g. [0, 0])
+                valid_heading_mask = heading_vec.norm(dim=1) > 1e-6
+                # Predicted heading (cos/sin) from model output
+                pheading = ps[valid_heading_mask, -2:]
+                theading = heading_vec[valid_heading_mask]
 
                 # TODO: which loss for heading?
-                ang_error = sin_cos_MSE(pheading, heading)
+                ang_error = sin_cos_MSE(pheading, theading)
                 lhead += ang_error
 
                 # Classification

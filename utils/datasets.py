@@ -652,10 +652,15 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                 else:
                     raise ValueError("no normalization strategy defined")
 
+                # invalid heading values: if cos=0 and sin=0
+                cos_sin = labels[:, -2:]
                 # normalize sin/cos heading to unit circle
-                cos_sin = labels[..., -2:]
-                cos_sin = F.normalize(cos_sin, dim=-1)
-                labels[..., -2:] = cos_sin
+                norms = np.linalg.norm(cos_sin, axis=1)
+                valid_mask_h = norms > 1e-6
+                cos_sin_valid = cos_sin[valid_mask_h]
+                norms_valid = norms[valid_mask_h][:, np.newaxis]
+                cos_sin_normalized = cos_sin_valid / norms_valid
+                labels[valid_mask_h, -2:] = np.round(cos_sin_normalized, 2)
 
 
         if self.augment:

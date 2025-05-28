@@ -438,10 +438,10 @@ def plot_results_overlay(start=0, stop=0):  # from utils.plots import *; plot_re
 
 def plot_results(start=0, stop=0, bucket='', id=(), labels=(), save_dir='', results_dir=''):
     # Plot training 'results*.txt'. from utils.plots import *; plot_results(save_dir='runs/train/exp')
-    fig, ax = plt.subplots(2, 7, figsize=(14, 4), tight_layout=True)
+    fig, ax = plt.subplots(3, 4, figsize=(10, 8), tight_layout=True)
     ax = ax.ravel()
-    s = ['Box', 'Objectness', 'Distance', 'cosH', 'sinH', 'Precision', 'Recall', 'mAP@0.5', 'mAP@0.5:0.95',
-         'val Box', 'val Objectness', 'val Distance', 'val cosH', 'val sinH']
+    s = ['Box', 'Objectness', 'Distance', 'Heading', 'Precision', 'Recall', 'mAP@0.5', 'mAP@0.5:0.95',
+         'val Box', 'val Objectness', 'val Distance', 'val Heading']
     if results_dir:
         files = [Path(results_dir)]
     elif bucket:
@@ -454,10 +454,10 @@ def plot_results(start=0, stop=0, bucket='', id=(), labels=(), save_dir='', resu
     assert len(files), 'No results.txt files found in %s, nothing to plot.' % os.path.abspath(save_dir)
     for fi, f in enumerate(files):
         try:
-            results = np.loadtxt(f, usecols=[2, 3, 5, 6, 7, 11, 12, 13, 14, 17, 18, 20, 21, 22], ndmin=2).T
+            results = np.loadtxt(f, usecols=[2, 3, 5, 6, 10, 11, 12, 13, 16, 17, 19, 20], ndmin=2).T
             n = results.shape[1]  # number of rows
             x = range(start, min(stop, n) if stop else n)
-            for i in range(14):
+            for i in range(12):
                 y = results[i, x]
                 if i in [0, 1, 2, 5, 6, 7]:
                     y[y == 0] = np.nan  # don't show zero loss values

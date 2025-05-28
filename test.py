@@ -1,11 +1,13 @@
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 from threading import Thread
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 import yaml
 from sympy.integrals.meijerint_doc import category
 from tqdm import tqdm
@@ -123,7 +125,6 @@ def test(data,
                                        prefix=task, traintestval='test')[0]
                                        # prefix=colorstr(f'{task}: '))[0]
 
-
     if v5_metric:
         print("Testing with YOLOv5 AP metric...")
 
@@ -163,26 +164,28 @@ def test(data,
 
                 if hyp is not None: 
                     max_distance = hyp["max_distance"]
-                    loss_targets [:, -2] = torch.clamp(loss_targets[:, -2], 0, max_distance)  # clamp distances to max_distance at most
+                    loss_targets [:, -3] = torch.clamp(loss_targets[:, -3], 0, max_distance)  # clamp distances to max_distance at most
                     if hyp["normalization_strategy"] == 'log':
-                        loss_targets[:, -2] = torch.log(loss_targets[:, -2] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
-                        loss_targets[:, -2] = loss_targets[:, -2] / torch.log(max_distance)
+                        loss_targets[:, -3] = torch.log(loss_targets[:, -3] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
+                        loss_targets[:, -3] = loss_targets[:, -3] / torch.log(max_distance)
                     elif hyp["normalization_strategy"] == 'log_negative':
-                        loss_targets[:, -2] = torch.log(loss_targets[:, -2] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
-                        loss_targets[:, -2] = loss_targets[:, -2] / torch.log(max_distance) - 0.5
+                        loss_targets[:, -3] = torch.log(loss_targets[:, -3] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
+                        loss_targets[:, -3] = loss_targets[:, -3] / torch.log(max_distance) - 0.5
                     elif hyp["normalization_strategy"] == 'linear':
-                        loss_targets[:, -2] = loss_targets[:, -2] / max_distance
+                        loss_targets[:, -3] = loss_targets[:, -3] / max_distance
                     elif hyp["normalization_strategy"] == 'linear_negative':
-                        loss_targets[:, -2] = loss_targets[:, -2] / max_distance - 0.5
+                        loss_targets[:, -3] = loss_targets[:, -3] / max_distance - 0.5
                     else:
                         raise ValueError("no normalization strategy defined (in hyperparameter file)")
                 else:
                     # if no hyperparameter file passed use default normalization strategy (linear, max_dist = 1km)
-                    loss_targets[:, -2] = loss_targets[:, -2] / 1000
+                    loss_targets[:, -3] = loss_targets[:, -3] / 1000
 
                 # TODO: heading normalization
-                max_heading = 360
-                loss_targets[:, -1] /= max_heading
+                # normalize sin/cos heading to unit circle
+                cos_sin = loss_targets[..., -2:]
+                cos_sin = F.normalize(cos_sin, dim=-1)
+                loss_targets[..., -2:] = cos_sin
 
                 # compute val losses
                 L = compute_loss([x.float() for x in train_out], loss_targets)[1][:5]  # box, obj, cls, dist, heading
@@ -190,7 +193,7 @@ def test(data,
                 loss += L
 
             # Run NMS
-            targets[:, 2:-2] *= torch.Tensor([width, height, width, height]).to(device)  # to pixels
+            targets[:, 2:-3] *= torch.Tensor([width, height, width, height]).to(device)  # to pixels
             lb = [targets[targets[:, 0] == i, 1:] for i in range(nb)] if save_hybrid else []  # for autolabelling
             t = time_synchronized()
             out = non_max_suppression(out, conf_thres=conf_thres, iou_thres=iou_thres, labels=lb, multi_label=True)
@@ -202,28 +205,29 @@ def test(data,
             labels = targets[targets[:, 0] == si, 1:]
             nl = len(labels)
             tcls = labels[:, 0].tolist() if nl else []  # target class
-            tdist = labels[:, -2].tolist() if nl else []  # target class
-            thead = labels[:, -1].tolist() if nl else [] # target class
+            tdist = labels[:, -3].tolist() if nl else []  # target class
+            tcosh = labels[:, -2].tolist() if nl else [] # target class
+            tsinh = labels[:, -1].tolist() if nl else []  # target class
             path = Path(paths[si])
             seen += 1
 
             if len(pred) == 0:
                 if nl:
-                    # Append statistics (correct, conf, pcls, tcls, pdist, tdist, phead, thead)
+                    # Append statistics (correct, conf, pcls, tcls, pdist, tdist, pcosh, tcosh, psinh, tsinh)
                     stats.append((torch.zeros(0, niou, dtype=torch.bool), torch.Tensor(), torch.Tensor(),
-                                  tcls, torch.Tensor(), tdist, torch.Tensor(), thead))
+                                  tcls, torch.Tensor(), tdist, torch.Tensor(), tcosh, torch.Tensor(), tsinh))
                 continue
 
             # Predictions
             predn = pred.clone()
-            scale_coords(img[si].shape[1:], predn[:, :5], shapes[si][0], shapes[si][1])  # native-space pred
+            scale_coords(img[si].shape[1:], predn[:, :6], shapes[si][0], shapes[si][1])  # native-space pred
 
             # Append to text file
             if save_txt:
                 gn = torch.tensor(shapes[si][0])[[1, 0, 1, 0]]  # normalization gain whwh
-                for *xyxy, conf, cls, dist, heading in predn.tolist():
+                for *xyxy, conf, cls, dist, cosh, sinh in predn.tolist():
                     xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                    line = (cls, *xywh, conf, dist, heading) if save_conf else (cls, *xywh, dist, heading)  # label format
+                    line = (cls, *xywh, conf, dist, cosh, sinh) if save_conf else (cls, *xywh, dist, cosh, sinh)  # label format
                     with open(save_dir / 'labels' / (path.stem + '.txt'), 'a') as f:
                         f.write(('%g ' * len(line)).rstrip() % line + '\n')
 
@@ -235,8 +239,8 @@ def test(data,
                                  "box_caption": "%s %.1f" % (names[cls], conf),
                                  "scores": {"class_score": conf},
                                  "distance": dist,
-                                 "heading": heading,
-                                 "domain": "pixel"} for *xyxy, conf, cls, dist, heading in pred.tolist()]
+                                 "heading": (math.degrees(math.atan2(sinh, cosh)) % 360),
+                                 "domain": "pixel"} for *xyxy, conf, cls, dist, cosh, sinh in pred.tolist()]
                     boxes = {"predictions": {"box_data": box_data, "class_labels": names}}  # inference-space
                     wandb_images.append(wandb_logger.wandb.Image(img[si], boxes=boxes, caption=path.name))
             wandb_logger.log_training_progress(predn, path, names) if wandb_logger and wandb_logger.wandb_run else None
@@ -251,8 +255,9 @@ def test(data,
                     jdict.append({'image_id': image_id,
                                   'category_id': coco91class[int(p[5])] if is_coco else int(p[5]),
                                   'bbox': [round(x, 3) for x in b],
-                                  'distance': p[-2],
-                                  'heading': p[-1],
+                                  'distance': p[-3],
+                                  'cosh': p[-2],
+                                  'sinh': p[-1],
                                   'score': round(p[4], 5)},)
 
             # Assign all predictions as incorrect
@@ -260,8 +265,6 @@ def test(data,
             if nl:
                 detected = []  # target indices
                 tcls_tensor = labels[:, 0]
-                tdist_tensor = labels[:, -2]
-                thead_tensor = labels[:, -1]
 
                 # target boxes
                 tbox = xywh2xyxy(labels[:, 1:5])
@@ -292,15 +295,20 @@ def test(data,
                                 correct[pi[j]] = ious[j] > iouv  # iou_thres is 1xn
 
                                 #distances
-                                pred_dist = pred[pi[j], -2]
-                                target_dist = labels[d, -2]
+                                pred_dist = pred[pi[j], -3]
+                                target_dist = labels[d, -3]
 
                                 # headings
-                                pred_head = pred[pi[j], -1]
-                                target_head = labels[d, -1]
+                                pred_cosh = pred[pi[j], -2]
+                                pred_sinh = pred[pi[j], -1]
+                                target_cosh = labels[d, -2]
+                                target_sinh = labels[d, -1]
 
-                                if target_dist == -1 or target_head == -1:
+                                if target_dist == -1 or (target_cosh == 0 and target_sinh == 0):
                                     continue
+
+                                target_head = torch.rad2deg(torch.arctan2(target_sinh, target_cosh)) % 360
+                                pred_head = torch.rad2deg(torch.arctan2(pred_sinh, pred_cosh)) % 360
 
                                 # calculate distance error
                                 pred_conf = pred[pi[j], 4]
@@ -314,7 +322,6 @@ def test(data,
                                 # calculate heading error
                                 target_head = float(target_head.cpu())
                                 pred_head = float(pred_head.cpu())
-                                # TODO: correct heading error
                                 heading_error = min(abs(pred_head - target_head), 360 - abs(pred_head - target_head))
                                 head_pred_and_gt.append([target_head, pred_head])
                                 head_errors_plot.append([target_head, heading_error])
@@ -325,8 +332,9 @@ def test(data,
                                     break
                 distance_errors.append(distance_errors_per_cat)
                 head_errors.append([head_errors_per_cat])
-            # Append statistics (correct, conf, pcls, tcls, pdist, tdist, phead, thead)
-            stats.append((correct.cpu(), pred[:, 4].cpu(), pred[:, 5].cpu(), tcls, pred[:,-2].cpu(), tdist, pred[:,-1].cpu(), thead))
+            # Append statistics (correct, conf, pcls, tcls, pdist, tdist, pcosh, tcosh, psinh, tsinh)
+            stats.append((correct.cpu(), pred[:, 4].cpu(), pred[:, 5].cpu(), tcls, pred[:,-3].cpu(), tdist,
+                          pred[:,-2].cpu(), tcosh, pred[:,-1].cpu(), tsinh))
 
         # Plot images
         if plots and batch_i < 3:

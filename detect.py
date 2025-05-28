@@ -121,15 +121,18 @@ def detect(save_img=False):
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
 
                 # Print results
-                for c in det[:, -3].unique():
-                    n = (det[:, -3] == c).sum()  # detections per class
+                for c in det[:, -4].unique():
+                    n = (det[:, -4] == c).sum()  # detections per class
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
                 # Write results
-                for *xyxy, conf, cls, distance, heading in reversed(det):
+                for *xyxy, conf, cls, distance, cosh, sinh in reversed(det):
+                    heading_rad = torch.arctan2(sinh, cosh)  # in radians [-π, π]
+                    heading_deg = torch.degrees(heading_rad) % 360  # wrap to [0, 360)
+                    heading = heading_deg
                     if save_txt:  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                        line = (cls, *xywh, conf, distance, heading) if opt.save_conf else (cls, *xywh, distance, heading)  # label format
+                        line = (cls, *xywh, conf, distance, cosh, sinh, heading) if opt.save_conf else (cls, *xywh, distance, cosh, sinh, heading)  # label format
                         with open(txt_path + '.txt', 'a') as f:
                             f.write(('%g ' * len(line)).rstrip() % line + '\n')
 

@@ -9,8 +9,7 @@ normalization_strategy: "linear" #log, linear, log_negative, linear_negative
 max_distance: 1000 #1000 . could also be 500 or 2000
 dist_loss: "L1" #1L1, L2, ...
 distance: 0.05  # distance loss gain
-headX: 0.05 # headX loss gain (cos)
-headY: 0.05 # headY loss gain (sin)
+heading: 0.05 # heading loss gain
 box: 0.05  # box loss gain
 cls: 0.3  # cls loss gain
 cls_pw: 1.0  # cls BCELoss positive_weight
