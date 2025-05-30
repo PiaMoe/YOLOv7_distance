@@ -520,13 +520,14 @@ class ComputeLoss:
                 heading_vec = torch.stack((cosh, sinh), dim=1)
                 # Filter out invalid headings (e.g. [0, 0])
                 valid_heading_mask = heading_vec.norm(dim=1) > 1e-6
-                # Predicted heading (cos/sin) from model output
-                pheading = ps[valid_heading_mask, -2:]
-                theading = heading_vec[valid_heading_mask]
+                if valid_heading_mask.any():
+                    # Predicted heading (cos/sin) from model output
+                    pheading = ps[valid_heading_mask, -2:]
+                    theading = heading_vec[valid_heading_mask]
 
-                # TODO: which loss for heading?
-                ang_error = sin_cos_MSE(pheading, theading)
-                lhead += ang_error
+                    # TODO: which loss for heading?
+                    ang_error = sin_cos_MSE(pheading, theading)
+                    lhead += ang_error
 
                 # Classification
                 if self.nc > 1:  # cls loss (only if multiple classes)
