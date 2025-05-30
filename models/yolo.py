@@ -209,7 +209,7 @@ class IDetect(nn.Module):
         return rescaled_heading
 
 
-    def fuseforward(self, x):
+    def fuseforward(self, x, epoch=1, batch_i=1):
         # x = x.copy()  # for profiling
         z = []  # inference output
         self.training |= self.export
