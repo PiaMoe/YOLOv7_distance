@@ -181,11 +181,7 @@ def test(data,
                     # if no hyperparameter file passed use default normalization strategy (linear, max_dist = 1km)
                     loss_targets[:, -3] = loss_targets[:, -3] / 1000
 
-                # TODO: heading normalization
-                # normalize sin/cos heading to unit circle
-                cos_sin = loss_targets[..., -2:]
-                cos_sin = F.normalize(cos_sin, dim=-1)
-                loss_targets[..., -2:] = cos_sin
+                # heading normalization in loss function
 
                 # compute val losses
                 L = compute_loss([x.float() for x in train_out], loss_targets)[1][:5]  # box, obj, cls, dist, heading
@@ -307,9 +303,6 @@ def test(data,
                                 if target_dist == -1 or (target_cosh == 0 and target_sinh == 0):
                                     continue
 
-                                target_head = torch.rad2deg(torch.arctan2(target_sinh, target_cosh)) % 360
-                                pred_head = torch.rad2deg(torch.arctan2(pred_sinh, pred_cosh)) % 360
-
                                 # calculate distance error
                                 pred_conf = pred[pi[j], 4]
                                 distance_error = abs(pred_dist - target_dist)
@@ -318,6 +311,9 @@ def test(data,
                                 # distance_errors.append(distance_error.item())
                                 distance_conf_and_error_and_gt = [float(pred_conf), float(distance_error), float(target_dist), float(pred_dist)]
                                 distance_errors_per_cat[int(cls)].append(distance_conf_and_error_and_gt)
+
+                                target_head = torch.rad2deg(torch.arctan2(target_sinh, target_cosh)) % 360
+                                pred_head = torch.rad2deg(torch.arctan2(pred_sinh, pred_cosh)) % 360
 
                                 # calculate heading error
                                 target_head = float(target_head.cpu())
