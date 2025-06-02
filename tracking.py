@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 from pathlib import Path
 
-from boxmot import DeepOcSort, StrongSort, BotSort, ByteTrack, HybridSort, OcSort
+from boxmot import DeepOCSORT, StrongSORT, BoTSORT, BYTETracker, HybridSORT, OCSORT
 import argparse
 import time
 from pathlib import Path
@@ -109,7 +109,7 @@ def detect(save_img=False):
     #     use_byte=False,
     # )
     #best together with deepocsort and some config changes
-    tracker = HybridSort(
+    tracker = HybridSORT(
             # model_weights=Path('osnet_x0_25_msmt17.pt'),  # which ReID model to use
     reid_weights=Path('osnet_ain_x1_0_msmt17.pt'),  # which ReID model to use
     device='cuda:0',half=False, det_thresh=0.1,per_class=False, max_age=10, min_hits=3,
@@ -201,8 +201,8 @@ def detect(save_img=False):
                 #dets = np.array([[144, 212, 578, 480, 0.82, 0],
                 #                  [425, 281, 576, 472, 0.56, 0]])
 
-                print(np.array(det[:,:6].cpu()))
-                updated_dets = tracker.update(np.array(det[:,:6].cpu()), im0)  # --> M X (x, y, x, y, id, conf, cls, ind)
+                # print(np.array(det[:,:-2].cpu()))
+                updated_dets = tracker.update(np.array(det[:,:-2].cpu()), im0)  # --> M X (x, y, x, y, id, conf, cls, ind)
                 tracker.plot_results(im0, show_trajectories=True)
 
 
@@ -215,7 +215,7 @@ def detect(save_img=False):
                             f.write(('%g ' * len(line)).rstrip() % line + '\n')
 
                     if save_img or view_img:  # Add bbox to image
-                        print("prediction rescaling to actual number distances")
+                        # print("prediction rescaling to actual number distances")
                         # label = f'{names[int(cls)]} {conf:.2f} {max(0,min(distance*1000,1000)):.2f}'
                         # label = f'{names[int(cls)]} {conf:.2f} {max(0,min(distance,1000)):.1f}'
                         label = f'{names[int(cls)]} {conf:.2f} {distance:.1f} {heading:.1f}' # i believe clipping is taken care of in inference yolo, distance
