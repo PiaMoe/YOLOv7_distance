@@ -1,8 +1,10 @@
+import math
+
 import cv2
 import numpy as np
 from pathlib import Path
 
-from boxmot import DeepOcSort, StrongSort, BotSort, ByteTrack, HybridSort, OcSort
+from boxmot import DeepOCSORT, StrongSORT, BoTSORT, BYTETracker, HybridSORT, OCSORT
 import argparse
 import time
 from pathlib import Path
@@ -109,15 +111,12 @@ def detect(save_img=False):
     #     use_byte=False,
     # )
     #best together with deepocsort and some config changes
-    tracker = HybridSort(
+    tracker = HybridSORT(
             # model_weights=Path('osnet_x0_25_msmt17.pt'),  # which ReID model to use
     reid_weights=Path('osnet_ain_x1_0_msmt17.pt'),  # which ReID model to use
     device='cuda:0',half=False, det_thresh=0.1,per_class=False, max_age=10, min_hits=3,
                  iou_threshold=0.1, delta_t=3, asso_func="iou", inertia=0.1, longterm_reid_weight=0, TCM_first_step_weight=0, use_byte=False
     )
-
-    # if trace:
-    #     model = TracedModel(model, device, opt.img_size)
 
     if half:
         model.half()  # to FP16
@@ -178,7 +177,9 @@ def detect(save_img=False):
             pred = apply_classifier(pred, modelc, img, im0s)
 
         # Process detections
+        a = 0
         for i, det in enumerate(pred):  # detections per image
+            a += 1
             if webcam:  # batch_size >= 1
                 p, s, im0, frame = path[i], '%g: ' % i, im0s[i].copy(), dataset.count
             else:
@@ -193,35 +194,38 @@ def detect(save_img=False):
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
 
                 # Print results
-                for c in det[:, -2].unique():
-                    n = (det[:, -2] == c).sum()  # detections per class
+                for c in det[:, -5].unique():
+                    n = (det[:, -5] == c).sum()  # detections per class
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
                 #tracking
                 # substitute by your object detector, output has to be N X (x, y, x, y, conf, cls)
-                # dets = np.array([[144, 212, 578, 480, 0.82, 0],
-                #                  [425, 281, 576, 472, 0.56, 65]])
+                #dets = np.array([[144, 212, 578, 480, 0.82, 0],
+                #                  [425, 281, 576, 472, 0.56, 0]])
 
-                updated_dets = tracker.update(np.array(det[:,:-1].cpu()), im0)  # --> M X (x, y, x, y, id, conf, cls, ind)
+                # print(np.array(det[:,:-2].cpu()))
+                updated_dets = tracker.update(np.array(det[:,:-3].cpu()), im0)  # --> M X (x, y, x, y, id, conf, cls, ind)
                 tracker.plot_results(im0, show_trajectories=True)
 
 
                 # Write results
-                for *xyxy, conf, cls, distance in reversed(det):
+                for *xyxy, conf, cls, distance, cosh, sinh in reversed(det):
+                    heading_rad = torch.arctan2(sinh, cosh)  # in radians [-π, π]
+                    heading_deg = torch.rad2deg(heading_rad) % 360  # wrap to [0, 360)
+                    heading = heading_deg
                     if save_txt:  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                        line = (cls, *xywh, conf, distance) if opt.save_conf else (cls, *xywh, distance)  # label format
+                        line = (cls, *xywh, conf, distance, heading) if opt.save_conf else (cls, *xywh, distance, heading)  # label format
                         with open(txt_path + '.txt', 'a') as f:
                             f.write(('%g ' * len(line)).rstrip() % line + '\n')
 
                     if save_img or view_img:  # Add bbox to image
-                        print("prediction rescaling to actual number distances")
+                        # print("prediction rescaling to actual number distances")
                         # label = f'{names[int(cls)]} {conf:.2f} {max(0,min(distance*1000,1000)):.2f}'
                         # label = f'{names[int(cls)]} {conf:.2f} {max(0,min(distance,1000)):.1f}'
-                        label = f'{names[int(cls)]} {conf:.2f} {distance:.1f}' # i believe clipping is taken care of in inference yolo, distance
+                        label = f'{names[int(cls)]} {conf:.2f} {distance:.1f} {heading:.1f}' # i believe clipping is taken care of in inference yolo, distance
                         color = get_color_based_on_distance(distance)
-                        # plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
-                        # plot_one_box(xyxy, im0, label=label, color=color, line_thickness=1)
+                        plot_one_box(xyxy, im0, label=label, color=color, heading=heading, line_thickness=1)
 
             # Print time (inference + NMS)
             print(f'{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS')
@@ -289,7 +293,6 @@ if __name__ == '__main__':
                 strip_optimizer(opt.weights)
         else:
             detect()
-
 
 
 
