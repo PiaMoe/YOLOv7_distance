@@ -13,6 +13,7 @@ from utils.general import make_divisible, check_file, set_logging
 from utils.torch_utils import time_synchronized, fuse_conv_and_bn, model_info, scale_img, initialize_weights, \
     select_device, copy_attr
 from utils.loss import SigmoidBin
+from utils.logger import log_predictions
 
 try:
     import thop  # for FLOPS computation
@@ -149,7 +150,12 @@ class IDetect(nn.Module):
         self.ia = nn.ModuleList(ImplicitA(x) for x in ch)
         self.im = nn.ModuleList(ImplicitM(self.no * self.na) for _ in ch)
 
-    def forward(self, x):
+        self.epoch = 1
+        self.batch = 1
+
+    def forward(self, x,  epoch=1, batch_i=1):
+        self.epoch = epoch
+        self.batch_i = batch_i
         # x = x.copy()  # for profiling
         z = []  # inference output
         self.training |= self.export
@@ -158,6 +164,11 @@ class IDetect(nn.Module):
             x[i] = self.im[i](x[i])
             bs, _, ny, nx = x[i].shape  # x(bs,255,20,20) to x(bs,3,20,20,85)
             x[i] = x[i].view(bs, self.na, self.no, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
+
+            # log model outputs
+            raw = x[i].detach().cpu()  # shape: (bs, na, ny, nx, no)
+            log_predictions(raw, self.epoch, self.batch_i, output_dir="preds/", sample_prob=0.01,
+                            col_names=["x", "y", "w", "h", "obj", "class_0", "distance"])
 
             if not self.training:  # inference
                 if self.grid[i].shape[2:4] != x[i].shape[2:4]:
@@ -188,7 +199,7 @@ class IDetect(nn.Module):
 
         return rescaled_dist
 
-    def fuseforward(self, x):
+    def fuseforward(self, x, epoch=1, batch_i=1):
         # x = x.copy()  # for profiling
         z = []  # inference output
         self.training |= self.export
@@ -631,7 +642,7 @@ class Model(nn.Module):
         self.info()
         logger.info('')
 
-    def forward(self, x, augment=False, profile=False):
+    def forward(self, x, augment=False, profile=False, epoch=1, batch_i=1):
         if augment:
             img_size = x.shape[-2:]  # height, width
             s = [1, 0.83, 0.67]  # scales
@@ -639,7 +650,7 @@ class Model(nn.Module):
             y = []  # outputs
             for si, fi in zip(s, f):
                 xi = scale_img(x.flip(fi) if fi else x, si, gs=int(self.stride.max()))
-                yi = self.forward_once(xi)[0]  # forward
+                yi = self.forward_once(xi, epoch=epoch, batch_i=batch_i)[0]  # forward
                 # cv2.imwrite(f'img_{si}.jpg', 255 * xi[0].cpu().numpy().transpose((1, 2, 0))[:, :, ::-1])  # save
                 yi[..., :4] /= si  # de-scale
                 if fi == 2:
@@ -649,9 +660,9 @@ class Model(nn.Module):
                 y.append(yi)
             return torch.cat(y, 1), None  # augmented inference, train
         else:
-            return self.forward_once(x, profile)  # single-scale inference, train
+            return self.forward_once(x, profile, epoch=epoch, batch_i=batch_i)  # single-scale inference, train
 
-    def forward_once(self, x, profile=False):
+    def forward_once(self, x, profile=False, epoch=1, batch_i=1):
         y, dt = [], []  # outputs
         for m in self.model:
             if m.f != -1:  # if not from previous layer
@@ -675,7 +686,10 @@ class Model(nn.Module):
                 dt.append((time_synchronized() - t) * 100)
                 print('%10.1f%10.0f%10.1fms %-40s' % (o, m.np, dt[-1], m.type))
 
-            x = m(x)  # run
+            if isinstance(m, IDetect):
+                x = m(x, epoch=epoch, batch_i=batch_i)  # run
+            else:
+                x = m(x)  # run
 
             y.append(x if m.i in self.save else None)  # save output
 
