@@ -1,0 +1,7 @@
+#yaml file for YOLOv7
+train: /home/pmoessner/data/debug_data_DetDis/train/images
+test: /home/pmoessner/data/debug_data_DetDis/test/images
+val: /home/pmoessner/data/debug_data_DetDis/val/images
+
+nc: 1
+names: ['boat']
