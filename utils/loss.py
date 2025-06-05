@@ -483,11 +483,9 @@ class ComputeLoss:
 
                 # Calculate MSE loss for distances
                 # ldist += self.MSEdist(pdist, distance)
-                ldist += self.L1dist(pdist, distance)
-
-                # loss_distance = torch.where((distance == 1) & (pdist > 1), torch.zeros_like(pdist), (pdist - distance))
-                # ldist += loss_distance.mean()
-
+                valid_dist_mask = distance != -1  # filter out missing ground truth values
+                if valid_dist_mask.any():
+                    ldist += self.L1dist(pdist[valid_dist_mask], distance[valid_dist_mask])
 
                 # Classification
                 if self.nc > 1:  # cls loss (only if multiple classes)
