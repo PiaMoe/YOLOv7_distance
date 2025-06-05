@@ -370,7 +370,7 @@ def test(data,
         for bin_key in distance_bins
     }
     
-    mean_abs_dist_err_boat = abs_dist_err_boat / samples
+    mean_abs_dist_err_boat = abs_dist_err_boat / samples if samples != 0 else -1
 
 
     # Calculate the overall weighted mean distance error
@@ -382,15 +382,18 @@ def test(data,
 
 
     # Print the results for each bin
-    for bin_key in mean_abs_dist_err_boat_comp:
-        print(f"Distance bin {bin_key}:")
-        print("  samples: ", mean_abs_dist_err_boat_comp[bin_key]['n'])
-        print("  weighted_reL_dist_err_boat =", weighted_mean_dist_err_boat_comp[bin_key]['err'])
-        print("  abs_mean_dist_err_boat =", mean_abs_dist_err_boat_comp[bin_key]['err'])
-        metrics_bin_distances["metrics/distancebins/weighted_rel_dist_err_boat_"+str(bin_key)] = weighted_mean_dist_err_boat_comp[bin_key]['err']
-        metrics_bin_distances["metrics/distancebins/abs_mean_dist_err_boat_"+str(bin_key)] = mean_abs_dist_err_boat_comp[bin_key]['err']
-    if not wandb_logger is None:
-        wandb_logger.log(metrics_bin_distances)
+    if mean_abs_dist_err_boat_comp:
+        for bin_key in mean_abs_dist_err_boat_comp:
+            print(f"Distance bin {bin_key}:")
+            print("  samples: ", mean_abs_dist_err_boat_comp[bin_key]['n'])
+            print("  weighted_reL_dist_err_boat =", weighted_mean_dist_err_boat_comp[bin_key]['err'])
+            print("  abs_mean_dist_err_boat =", mean_abs_dist_err_boat_comp[bin_key]['err'])
+            metrics_bin_distances["metrics/distancebins/weighted_rel_dist_err_boat_"+str(bin_key)] = weighted_mean_dist_err_boat_comp[bin_key]['err']
+            metrics_bin_distances["metrics/distancebins/abs_mean_dist_err_boat_"+str(bin_key)] = mean_abs_dist_err_boat_comp[bin_key]['err']
+        if not wandb_logger is None:
+            wandb_logger.log(metrics_bin_distances)
+    else:
+        print("No bounding boxes matched --> no distance error")
 
     # Print the overall results
     print("Total Samples: ", samples)

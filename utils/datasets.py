@@ -636,17 +636,19 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             # if not self.prefix in ['val','test']:
             if self.traintestval == 'train':
                 max_distance = hyp["max_distance"]
-                labels[:, -1] = np.clip(labels[:, -1], 0, max_distance)  # clamp distances to max_distance at most
+                # only normalize values that are not -1
+                valid_mask = labels[:, -1] != -1
+                labels[valid_mask, -1] = np.clip(labels[valid_mask, -1], 0, max_distance)  # clamp distances to max_distance at most
                 if hyp["normalization_strategy"] == 'log':
-                    labels[:, -1] = np.log(labels[:, -1] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
-                    labels[:, -1] = labels[:, -1] / np.log(max_distance)
+                    labels[valid_mask, -1] = np.log(labels[valid_mask, -1] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
+                    labels[valid_mask, -1] = labels[valid_mask, -1] / np.log(max_distance)
                 elif hyp["normalization_strategy"] == 'log_negative':
-                    labels[:, -1] = np.log(labels[:, -1] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
-                    labels[:, -1] = labels[:, -1] / np.log(max_distance) - 0.5
+                    labels[valid_mask, -1] = np.log(labels[valid_mask, -1] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
+                    labels[valid_mask, -1] = labels[valid_mask, -1] / np.log(max_distance) - 0.5
                 elif hyp["normalization_strategy"] == 'linear':
-                    labels[:, -1] = labels[:, -1] / max_distance
+                    labels[valid_mask, -1] = labels[valid_mask, -1] / max_distance
                 elif hyp["normalization_strategy"] == 'linear_negative':
-                    labels[:, -1] = labels[:, -1] / max_distance - 0.5
+                    labels[valid_mask, -1] = labels[valid_mask, -1] / max_distance - 0.5
                 else:
                     raise ValueError("no normalization strategy defined")
         if self.augment:
