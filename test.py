@@ -163,7 +163,7 @@ def test(data,
                         loss_targets[:, -1] = loss_targets[:, -1] / torch.log(max_distance)
                     elif hyp["normalization_strategy"] == 'log_negative':
                         loss_targets[:, -1] = torch.log(loss_targets[:, -1] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
-                        loss_targets[:, -1] = labels[:, -1] / torch.log(max_distance) - 0.5
+                        loss_targets[:, -1] = loss_targets[:, -1] / torch.log(max_distance) - 0.5
                     elif hyp["normalization_strategy"] == 'linear':
                         loss_targets[:, -1] = loss_targets[:, -1] / max_distance
                     elif hyp["normalization_strategy"] == 'linear_negative':
@@ -272,6 +272,8 @@ def test(data,
                                 #distances
                                 pred_dist = pred[pi[j], -1]
                                 target_dist = labels[d, -1]
+                                if target_dist == -1:
+                                    continue
                                 pred_conf = pred[pi[j], 4]
                                 distance_error = abs(pred_dist - target_dist)
                                 dist_errors_plot.append([float(target_dist.cpu()), float(pred_dist.cpu() - target_dist.cpu())])
@@ -334,6 +336,9 @@ def test(data,
     abs_dist_err_boat = 0 # absolute dist error without conf weights
     total_conf_boat = 0
     samples = 0
+    mean_abs_dist_err_boat_comp = None
+    weighted_mean_dist_err_boat_comp = None
+
     # print(distance_errors)
     for distance_err in distance_errors:
         if 0 in distance_err.keys():
@@ -344,6 +349,8 @@ def test(data,
                 total_conf_boat += dconf
                 samples += 1
                 for bin_min, bin_max in distance_bins:
+                    if gt < 0:
+                        print(f"GT is negative!!: {gt}")
                     if bin_min <= gt < bin_max:
                         bin_key = (bin_min, bin_max)
                         mean_dist_err_boat_bins[bin_key] += dconf * derror / gt
@@ -353,8 +360,10 @@ def test(data,
                         break
 
     # compress bins for console logging
-    mean_abs_dist_err_boat_comp = compressBins(abs_dist_err_boat_bins, samples_per_bin)
-    weighted_mean_dist_err_boat_comp = compressBins(mean_dist_err_boat_bins, total_conf_boat_bins)
+    if abs_dist_err_boat_bins:
+        mean_abs_dist_err_boat_comp = compressBins(abs_dist_err_boat_bins, samples_per_bin)
+    if mean_dist_err_boat_bins:
+        weighted_mean_dist_err_boat_comp = compressBins(mean_dist_err_boat_bins, total_conf_boat_bins)
 
     # Calculate the weighted mean distance error for each bin
     weighted_mean_dist_err_boat_bins = {
