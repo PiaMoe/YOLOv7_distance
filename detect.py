@@ -13,10 +13,11 @@ from utils.general import check_img_size, check_requirements, check_imshow, non_
     scale_coords, xyxy2xywh, strip_optimizer, set_logging, increment_path
 from utils.plots import plot_one_box
 from utils.torch_utils import select_device, load_classifier, time_synchronized, TracedModel
+from secondStageModel.crop_regressor import CropRegressor
 
 
 def detect(save_img=False):
-    source, weights, view_img, save_txt, imgsz, trace = opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size, not opt.no_trace
+    source, weights, weights_reg, view_img, save_txt, imgsz, trace = opt.source, opt.weights, opt.weightsRegressor, opt.view_img, opt.save_txt, opt.img_size, not opt.no_trace
     save_img = not opt.nosave and not source.endswith('.txt')  # save inference images
     webcam = source.isnumeric() or source.endswith('.txt') or source.lower().startswith(
         ('rtsp://', 'rtmp://', 'http://', 'https://'))
@@ -40,6 +41,11 @@ def detect(save_img=False):
 
     if half:
         model.half()  # to FP16
+
+    # Second-stage regressor (distance & heading)
+    modelDH = CropRegressor()
+    modelDH.load_state_dict(torch.load(weights_reg, map_location=device))
+    modelDH = modelDH.to(device)
 
     # Second-stage classifier
     classify = False
@@ -95,6 +101,35 @@ def detect(save_img=False):
         # Apply Classifier
         if classify:
             pred = apply_classifier(pred, modelc, img, im0s)
+
+        # TODO: second stage
+        crops = []
+        for bbox in pred:
+            x1, y1, x2, y2 = map(int, bbox)
+            crop = image[y1:y2, x1:x2, :]  # falls NumPy
+            crop = transform(crop)  # wie im Training
+            crops.append(crop)
+
+        crops = torch.stack(crops).to(device)
+
+        modelDH.eval()
+        with torch.no_grad():
+            dh_pred = modelDH(crops)  # Shape: [N, 2] → distance, heading
+
+        distance = dh_pred[:, 0]
+        heading = torch.atan2(dh_pred[:, 1], dh_pred[:, 2]) * 180 / torch.pi
+
+        final_output = []
+        for bbox, (dist, head) in zip(pred, dh_pred.cpu()):
+            x1, y1, x2, y2 = bbox
+            final_output.append({
+                'bbox': [x1, y1, x2, y2],
+                'distance': dist.item(),
+                'heading': head.item()
+            })
+
+
+
 
         # Process detections
         for i, det in enumerate(pred):  # detections per image
@@ -165,7 +200,8 @@ def detect(save_img=False):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', nargs='+', type=str, default='yolov7.pt', help='model.pt path(s)')
+    parser.add_argument('--weightsYOLO', nargs='+', type=str, default='yolov7.pt', help='model.pt path(s)')
+    parser.add_argument('--weightsRegressor', nargs='+', type=str, default='yolov7.pt', help='model.pt path(s)')
     parser.add_argument('--source', type=str, default='inference/images', help='source')  # file/folder, 0 for webcam
     parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='object confidence threshold')
