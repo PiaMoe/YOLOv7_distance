@@ -516,7 +516,6 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                         # currently: distance can be negative but loss won't be computed
                         # assert (l >= 0).all(), 'negative labels'
                         assert (l[:, 1:-2] >= 0).all(), 'negative bbox/label values'
-                        assert (l >= 0).all(), 'negative labels'
                         assert (l[:, 1:-1] <= 1).all(), 'non-normalized or out of bounds coordinate labels'
                         assert np.unique(l, axis=0).shape[0] == l.shape[0], 'duplicate labels'
                     else:
