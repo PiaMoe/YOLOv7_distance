@@ -13,7 +13,9 @@ import numpy as np
 def custom_loss(outputs, targets):
     # outputs: [batch, 3] -> [distance_norm, cos, sin]
     # targets: [batch, 3] -> [distance_norm, cos, sin]
-    distance_loss = nn.functional.mse_loss(outputs[:, 0], targets[:, 0])
+    distance_pred = outputs[:, 0]  # Normalized distance
+    distance_true = targets[:, 0]  # Normalized distance
+    distance_loss = nn.functional.mse_loss(distance_pred, distance_true)
     heading_pred = outputs[:, 1:3]  # [cos, sin]
     heading_true = targets[:, 1:3]  # [cos, sin]
     cosine_sim = nn.functional.cosine_similarity(heading_pred, heading_true, dim=1)
@@ -68,6 +70,8 @@ def evaluate(model, val_loader, device):
     mean_abs_distance_error_bins = [
         np.mean(bin) if len(bin) > 0 else float('nan') for bin in abs_distance_errors_bins
     ]
+    bin_counts = [len(bin) for bin in abs_distance_errors_bins]
+    print("Number of examples per bin (0-200, 200-400, 400-600, 600-800, 800-1000):", bin_counts)
     return (
         total_loss / n,
         total_distance_loss / n,
@@ -88,7 +92,7 @@ def train(train_dataset, val_dataset, epochs=20):
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
     best_val_loss = float('inf')
-    best_model_path = "best_model.pth"
+    best_model_path = "experiment_1/best.pth"
 
     crops_saved = 0
     max_crops_to_save = 0
@@ -150,13 +154,13 @@ def train(train_dataset, val_dataset, epochs=20):
 
         print(
             f"Epoch {epoch+1}, Train Loss: {epoch_train_loss:.4f}, "
-            f"Val Loss: {epoch_val_loss:.4f}, "
-            f"Train Distance Loss: {epoch_train_distance_loss:.4f}, "
-            f"Val Distance Loss: {epoch_val_distance_loss:.4f}, "
-            f"Train Heading Loss: {epoch_train_heading_loss:.4f}, "
-            f"Val Heading Loss: {epoch_val_heading_loss:.4f}, "
-            f"Val Mean Angle Error: {epoch_val_angle_error:.2f} deg, "
-            f"Val Mean Abs Distance Error: {epoch_val_abs_distance_error:.2f} m"
+            f"\nVal Loss: {epoch_val_loss:.4f}, "
+            f"\nTrain Distance Loss: {epoch_train_distance_loss:.4f}, "
+            f"\nVal Distance Loss: {epoch_val_distance_loss:.4f}, "
+            f"\nTrain Heading Loss: {epoch_train_heading_loss:.4f}, "
+            f"\nVal Heading Loss: {epoch_val_heading_loss:.4f}, "
+            f"\nVal Mean Angle Error: {epoch_val_angle_error:.2f} deg, "
+            f"\nVal Mean Abs Distance Error: {epoch_val_abs_distance_error:.2f} m"
         )
         print("Val Mean Abs Distance Error Bins (0-200, 200-400, 400-600, 600-800, 800-1000):", epoch_val_abs_distance_error_bins)
 

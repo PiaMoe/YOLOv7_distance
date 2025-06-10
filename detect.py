@@ -14,10 +14,21 @@ from utils.general import check_img_size, check_requirements, check_imshow, non_
 from utils.plots import plot_one_box
 from utils.torch_utils import select_device, load_classifier, time_synchronized, TracedModel
 from secondStageModel.crop_regressor import CropRegressor
+import torchvision.transforms.functional as TF
 
+
+def get_color_based_on_distance(distance):
+    if distance <= 50:
+        return (0, 0, 255)  # Red in BGR
+    elif 50 < distance <= 150:
+        return (0, 165, 255)  # Orange in BGR
+    elif 150 < distance <= 300:
+        return (0, 250, 250)  # Yellow in BGR
+    else:
+        return (255, 0, 0)  # Blue in BGR
 
 def detect(save_img=False):
-    source, weights, weights_reg, view_img, save_txt, imgsz, trace = opt.source, opt.weights, opt.weightsRegressor, opt.view_img, opt.save_txt, opt.img_size, not opt.no_trace
+    source, weights, weights_reg, view_img, save_txt, imgsz, trace = opt.source, opt.weightsYOLO, opt.weightsRegressor, opt.view_img, opt.save_txt, opt.img_size, not opt.no_trace
     save_img = not opt.nosave and not source.endswith('.txt')  # save inference images
     webcam = source.isnumeric() or source.endswith('.txt') or source.lower().startswith(
         ('rtsp://', 'rtmp://', 'http://', 'https://'))
@@ -44,7 +55,7 @@ def detect(save_img=False):
 
     # Second-stage regressor (distance & heading)
     modelDH = CropRegressor()
-    modelDH.load_state_dict(torch.load(weights_reg, map_location=device))
+    modelDH.load_state_dict(torch.load(weights_reg[0], map_location=device))
     modelDH = modelDH.to(device)
 
     # Second-stage classifier
@@ -101,38 +112,34 @@ def detect(save_img=False):
         # Apply Classifier
         if classify:
             pred = apply_classifier(pred, modelc, img, im0s)
-
-        # TODO: second stage
-        crops = []
-        for bbox in pred:
-            x1, y1, x2, y2 = map(int, bbox)
-            crop = image[y1:y2, x1:x2, :]  # falls NumPy
-            crop = transform(crop)  # wie im Training
-            crops.append(crop)
-
-        crops = torch.stack(crops).to(device)
-
-        modelDH.eval()
-        with torch.no_grad():
-            dh_pred = modelDH(crops)  # Shape: [N, 2] → distance, heading
-
-        distance = dh_pred[:, 0]
-        heading = torch.atan2(dh_pred[:, 1], dh_pred[:, 2]) * 180 / torch.pi
-
-        final_output = []
-        for bbox, (dist, head) in zip(pred, dh_pred.cpu()):
-            x1, y1, x2, y2 = bbox
-            final_output.append({
-                'bbox': [x1, y1, x2, y2],
-                'distance': dist.item(),
-                'heading': head.item()
-            })
-
-
-
-
         # Process detections
         for i, det in enumerate(pred):  # detections per image
+            if det is not None and len(det):
+                det[:, :4] = scale_coords(img.shape[2:], det[:, :4],
+                                          im0s.shape).round()  # auf Originalbildgröße skalieren
+
+                crops = []
+                for *xyxy, conf, cls in det:
+                    x1, y1, x2, y2 = map(int, xyxy)
+                    crop_img = im0s[y1:y2, x1:x2]  # OpenCV BGR Crop
+                    crop_img = cv2.resize(crop_img, (64, 64))  # Resize wie im Training
+
+                    # BGR → RGB → Tensor → Normalisieren [-1, 1]
+                    crop_img = cv2.cvtColor(crop_img, cv2.COLOR_BGR2RGB)
+                    crop_tensor = TF.to_tensor(crop_img)  # [0,1]
+                    crop_tensor = crop_tensor * 2 - 1  # → [-1, 1] (wie dein Training)
+
+                    crops.append(crop_tensor)
+
+                if crops:
+                    crop_batch = torch.stack(crops).to(device)  # [N, 3, 64, 64]
+                    with torch.no_grad():
+                        out = modelDH(crop_batch)  # [N, 3], enthält distance_norm, cos, sin
+
+                    distances = out[:, 0].cpu().numpy() * 1000.0
+                    headings = (torch.atan2(out[:, 2], out[:, 1]) * 180 / torch.pi) % 360
+                    det = torch.cat((det, torch.from_numpy(distances).unsqueeze(1).to(det.device), headings.unsqueeze(1).to(det.device)), dim=1)
+
             if webcam:  # batch_size >= 1
                 p, s, im0, frame = path[i], '%g: ' % i, im0s[i].copy(), dataset.count
             else:
@@ -145,23 +152,29 @@ def detect(save_img=False):
             if len(det):
                 # Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
-
+                print(det)
                 # Print results
-                for c in det[:, -1].unique():
-                    n = (det[:, -1] == c).sum()  # detections per class
+                for c in det[:, -3].unique():
+                    n = (det[:, -3] == c).sum()  # detections per class
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
                 # Write results
-                for *xyxy, conf, cls in reversed(det):
+                for *xyxy, conf, cls, dist, heading in reversed(det):
                     if save_txt:  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                        line = (cls, *xywh, conf) if opt.save_conf else (cls, *xywh)  # label format
+                        line = (cls, *xywh, conf, dist , heading) if opt.save_conf else (cls, *xywh)  # label format
                         with open(txt_path + '.txt', 'a') as f:
                             f.write(('%g ' * len(line)).rstrip() % line + '\n')
 
                     if save_img or view_img:  # Add bbox to image
-                        label = f'{names[int(cls)]} {conf:.2f}'
-                        plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
+                        label = f'{names[int(cls)]} {conf:.2f} {dist:.1f} {heading:.1f}'
+                        color = get_color_based_on_distance(dist)
+                        if color == (0, 250, 250):
+                            txtcolor = [0, 0, 0]
+                        else:
+                            txtcolor = [255, 255, 255]
+                        plot_one_box(xyxy, im0, label=label, color=color, line_thickness=1, textcolor=txtcolor,
+                                     heading=heading)
 
             # Print time (inference + NMS)
             print(f'{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS')

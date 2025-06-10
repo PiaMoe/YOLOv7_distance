@@ -5,18 +5,23 @@ import math
 import os
 import random
 from copy import copy
+from math import atan2
 from pathlib import Path
 
 import cv2
 import matplotlib
 import matplotlib.pyplot as plt
+import matplotlib.pyplot
+from matplotlib import ticker
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import torch
 import yaml
+from tueplots.constants.color import rgb
 from PIL import Image, ImageDraw, ImageFont
 from scipy.signal import butter, filtfilt
+from scipy.stats import gaussian_kde
 
 from utils.general import xywh2xyxy, xyxy2xywh
 from utils.metrics import fitness
@@ -54,7 +59,7 @@ def butter_lowpass_filtfilt(data, cutoff=1500, fs=50000, order=5):
     return filtfilt(b, a, data)  # forward-backward filter
 
 
-def plot_one_box(x, img, color=None, label=None, line_thickness=3):
+def plot_one_box(x, img, color=None, label=None, heading=None, line_thickness=3, textcolor=[255, 255, 255]):
     # Plots one bounding box on image img
     tl = line_thickness or round(0.002 * (img.shape[0] + img.shape[1]) / 2) + 1  # line/font thickness
     color = color or [random.randint(0, 255) for _ in range(3)]
@@ -65,7 +70,23 @@ def plot_one_box(x, img, color=None, label=None, line_thickness=3):
         t_size = cv2.getTextSize(label, 0, fontScale=tl / 3, thickness=tf)[0]
         c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3
         cv2.rectangle(img, c1, c2, color, -1, cv2.LINE_AA)  # filled
-        cv2.putText(img, label, (c1[0], c1[1] - 2), 0, tl / 3, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
+        cv2.putText(img, label, (c1[0], c1[1] - 2), 0, tl / 3, textcolor, thickness=tf, lineType=cv2.LINE_AA)
+    if heading:
+        # Plots arrow pointing in heading direction
+        center_x = int((x[0] + x[2]) / 2)
+        center_y = int((x[1] + x[3]) / 2)
+        rad = math.radians(heading)
+        box_w = abs(x[2] - x[0])
+        box_h = abs(x[3] - x[1])
+        box_diag = math.sqrt(box_w ** 2 + box_h ** 2)
+        # dynamic size, but limited
+        img_diag = math.sqrt(img.shape[0] ** 2 + img.shape[1] ** 2)
+        arrow_length = max(0.03 * img_diag, min(0.15 * img_diag, box_diag * 0.5))
+        # calculate direction
+        end_x = int(center_x + arrow_length * math.sin(rad))
+        end_y = int(center_y + arrow_length * math.cos(rad))
+        cv2.arrowedLine(img, (center_x, center_y), (end_x, end_y), color, thickness=tl, line_type=cv2.LINE_AA,
+                        tipLength=0.2)
 
 
 def plot_one_box_PIL(box, img, color=None, label=None, line_thickness=None):
@@ -103,11 +124,11 @@ def plot_wh_methods():  # from utils.plots import *; plot_wh_methods()
 
 
 def output_to_target(output):
-    # Convert model output to target format [batch_id, class_id, x, y, w, h, conf]
+    # Convert model output to target format [batch_id, class_id, x, y, w, h, conf, dist, cosh, sinh]
     targets = []
     for i, o in enumerate(output):
-        for *box, conf, cls in o.cpu().numpy():
-            targets.append([i, cls, *list(*xyxy2xywh(np.array(box)[None])), conf])
+        for *box, conf, cls, dist, cosh, sinh in o.cpu().numpy():
+            targets.append([i, cls, *list(*xyxy2xywh(np.array(box)[None])), conf, dist, cosh, sinh])
     return np.array(targets)
 
 
@@ -123,7 +144,7 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
     if np.max(images[0]) <= 1:
         images *= 255
 
-    tl = 3  # line thickness
+    tl = 2  # line thickness
     tf = max(tl - 1, 1)  # font thickness
     bs, _, h, w = images.shape  # batch size, _, height, width
     bs = min(bs, max_subplots)  # limit plot images
@@ -153,7 +174,10 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
             image_targets = targets[targets[:, 0] == i]
             boxes = xywh2xyxy(image_targets[:, 2:6]).T
             classes = image_targets[:, 1].astype('int')
-            labels = image_targets.shape[1] == 6  # labels if no conf column
+            distances = image_targets[:, -3]
+            cosines = image_targets[:, -2]
+            sines = image_targets[:, -1]
+            labels = image_targets.shape[1] == 6 + 3  # labels if no conf column (+3 bc of distance & heading)
             conf = None if labels else image_targets[:, 6]  # check for confidence presence (label vs pred)
 
             if boxes.shape[1]:
@@ -166,21 +190,38 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
             boxes[[1, 3]] += block_y
             for j, box in enumerate(boxes.T):
                 cls = int(classes[j])
-                color = colors[cls % len(colors)]
-                cls = names[cls] if names else cls
+                dist = distances[j]
+                cosh = cosines[j]
+                sinh = sines[j]
+                heading_rad = np.arctan2(sinh, cosh)  # in radians [-π, π]
+                heading_deg = np.degrees(heading_rad) % 360  # wrap to [0, 360)
+                heading = heading_deg
+                # TODO change in dataset.py as well if you change here and vice versa distances
+                if labels:
+                    pass
+                    # dist = (dist + 0.0) * np.log(1000) #changed to no negative values
+                    # dist = np.exp(dist)-1
+                    # dist = np.clip(dist, 0)
+                    # labels[:, -1] = np.clip(labels[:, -1], 0, 1000)  # clamp distances to 1000 at most
+                    # labels[:, -1] = np.log(labels[:, -1] + 1)  # push distances to log-scale, log(1) = 0 for distance=0
+
+                color = colors[cls % len(colors) + 1]
+                # no class name but number
+                # cls = names[cls] if names else cls
                 if labels or conf[j] > 0.25:  # 0.25 conf thresh
-                    label = '%s' % cls if labels else '%s %.1f' % (cls, conf[j])
+                    label = '%i %.1f %.1f' % (cls, dist, heading) if labels else '%i %.1f %.1f %.1f' % (
+                    cls, conf[j], dist, heading)
                     plot_one_box(box, mosaic, label=label, color=color, line_thickness=tl)
 
         # Draw image filename labels
         if paths:
             label = Path(paths[i]).name[:40]  # trim to 40 char
-            t_size = cv2.getTextSize(label, 0, fontScale=tl / 3, thickness=tf)[0]
+            t_size = cv2.getTextSize(label, 0, fontScale=tl / 4, thickness=tf)[0]
             cv2.putText(mosaic, label, (block_x + 5, block_y + t_size[1] + 5), 0, tl / 3, [220, 220, 220], thickness=tf,
                         lineType=cv2.LINE_AA)
 
         # Image border
-        cv2.rectangle(mosaic, (block_x, block_y), (block_x + w, block_y + h), (255, 255, 255), thickness=3)
+        cv2.rectangle(mosaic, (block_x, block_y), (block_x + w, block_y + h), (255, 255, 255), thickness=1)
 
     if fname:
         r = min(1280. / max(h, w) / ns, 1.0)  # ratio to limit image size
@@ -397,13 +438,15 @@ def plot_results_overlay(start=0, stop=0):  # from utils.plots import *; plot_re
         fig.savefig(f.replace('.txt', '.png'), dpi=200)
 
 
-def plot_results(start=0, stop=0, bucket='', id=(), labels=(), save_dir=''):
+def plot_results(start=0, stop=0, bucket='', id=(), labels=(), save_dir='', results_dir=''):
     # Plot training 'results*.txt'. from utils.plots import *; plot_results(save_dir='runs/train/exp')
-    fig, ax = plt.subplots(2, 5, figsize=(12, 6), tight_layout=True)
+    fig, ax = plt.subplots(3, 4, figsize=(10, 8), tight_layout=True)
     ax = ax.ravel()
-    s = ['Box', 'Objectness', 'Classification', 'Precision', 'Recall',
-         'val Box', 'val Objectness', 'val Classification', 'mAP@0.5', 'mAP@0.5:0.95']
-    if bucket:
+    s = ['Box', 'Objectness', 'Distance', 'Heading', 'Precision', 'Recall', 'mAP@0.5', 'mAP@0.5:0.95',
+         'val Box', 'val Objectness', 'val Distance', 'val Heading']
+    if results_dir:
+        files = [Path(results_dir)]
+    elif bucket:
         # files = ['https://storage.googleapis.com/%s/results%g.txt' % (bucket, x) for x in id]
         files = ['results%g.txt' % x for x in id]
         c = ('gsutil cp ' + '%s ' * len(files) + '.') % tuple('gs://%s/results%g.txt' % (bucket, x) for x in id)
@@ -413,16 +456,16 @@ def plot_results(start=0, stop=0, bucket='', id=(), labels=(), save_dir=''):
     assert len(files), 'No results.txt files found in %s, nothing to plot.' % os.path.abspath(save_dir)
     for fi, f in enumerate(files):
         try:
-            results = np.loadtxt(f, usecols=[2, 3, 4, 8, 9, 12, 13, 14, 10, 11], ndmin=2).T
+            results = np.loadtxt(f, usecols=[2, 3, 5, 6, 10, 11, 12, 13, 16, 17, 19, 20], ndmin=2).T
             n = results.shape[1]  # number of rows
             x = range(start, min(stop, n) if stop else n)
-            for i in range(10):
+            for i in range(12):
                 y = results[i, x]
                 if i in [0, 1, 2, 5, 6, 7]:
                     y[y == 0] = np.nan  # don't show zero loss values
                     # y /= y[0]  # normalize
                 label = labels[fi] if len(labels) else f.stem
-                ax[i].plot(x, y, marker='.', label=label, linewidth=2, markersize=8)
+                ax[i].plot(x, y, marker='.', label=label, linewidth=1, markersize=5)
                 ax[i].set_title(s[i])
                 # if i in [5, 6, 7]:  # share train and val loss y axes
                 #     ax[i].get_shared_y_axes().join(ax[i], ax[i - 5])
@@ -431,21 +474,22 @@ def plot_results(start=0, stop=0, bucket='', id=(), labels=(), save_dir=''):
 
     ax[1].legend()
     fig.savefig(Path(save_dir) / 'results.png', dpi=200)
-    
-    
+
+
 def output_to_keypoint(output):
     # Convert model output to target format [batch_id, class_id, x, y, w, h, conf]
     targets = []
     for i, o in enumerate(output):
-        kpts = o[:,6:]
-        o = o[:,:6]
+        kpts = o[:, 6:]
+        o = o[:, :6]
         for index, (*box, conf, cls) in enumerate(o.detach().cpu().numpy()):
-            targets.append([i, cls, *list(*xyxy2xywh(np.array(box)[None])), conf, *list(kpts.detach().cpu().numpy()[index])])
+            targets.append(
+                [i, cls, *list(*xyxy2xywh(np.array(box)[None])), conf, *list(kpts.detach().cpu().numpy()[index])])
     return np.array(targets)
 
 
 def plot_skeleton_kpts(im, kpts, steps, orig_shape=None):
-    #Plot the skeleton and keypointsfor coco datatset
+    # Plot the skeleton and keypointsfor coco datatset
     palette = np.array([[255, 128, 0], [255, 153, 51], [255, 178, 102],
                         [230, 230, 0], [255, 153, 255], [153, 204, 255],
                         [255, 102, 255], [255, 51, 255], [102, 178, 255],
@@ -475,15 +519,171 @@ def plot_skeleton_kpts(im, kpts, steps, orig_shape=None):
 
     for sk_id, sk in enumerate(skeleton):
         r, g, b = pose_limb_color[sk_id]
-        pos1 = (int(kpts[(sk[0]-1)*steps]), int(kpts[(sk[0]-1)*steps+1]))
-        pos2 = (int(kpts[(sk[1]-1)*steps]), int(kpts[(sk[1]-1)*steps+1]))
+        pos1 = (int(kpts[(sk[0] - 1) * steps]), int(kpts[(sk[0] - 1) * steps + 1]))
+        pos2 = (int(kpts[(sk[1] - 1) * steps]), int(kpts[(sk[1] - 1) * steps + 1]))
         if steps == 3:
-            conf1 = kpts[(sk[0]-1)*steps+2]
-            conf2 = kpts[(sk[1]-1)*steps+2]
-            if conf1<0.5 or conf2<0.5:
+            conf1 = kpts[(sk[0] - 1) * steps + 2]
+            conf2 = kpts[(sk[1] - 1) * steps + 2]
+            if conf1 < 0.5 or conf2 < 0.5:
                 continue
-        if pos1[0]%640 == 0 or pos1[1]%640==0 or pos1[0]<0 or pos1[1]<0:
+        if pos1[0] % 640 == 0 or pos1[1] % 640 == 0 or pos1[0] < 0 or pos1[1] < 0:
             continue
-        if pos2[0] % 640 == 0 or pos2[1] % 640 == 0 or pos2[0]<0 or pos2[1]<0:
+        if pos2[0] % 640 == 0 or pos2[1] % 640 == 0 or pos2[0] < 0 or pos2[1] < 0:
             continue
         cv2.line(im, pos1, pos2, (int(r), int(g), int(b)), thickness=2)
+
+
+def plot_dist_err(err_results, num_samples=None, labelX='GT - Distance [m]', labelY=r'$\varepsilon$',
+                  path='err_plot.png', color='blue'):
+    fig, ax = plt.subplots()
+    x = [(x[0] + x[1]) / 2 for x in err_results]
+    y = list(err_results.values())
+    bars = ax.bar(x, y, width=30, color=color)
+    # Annotate each bar with the corresponding sample count
+    if num_samples is not None:
+        for bar, key in zip(bars, num_samples):
+            yval = bar.get_height()  # Get the height of the bar
+            plt.text(bar.get_x() + bar.get_width() / 2, yval, num_samples[key], ha='center', va='bottom')
+
+    ax.set_ylabel(labelY)
+    ax.set_xlabel(labelX)
+    plt.savefig(path)
+
+
+def plot_errors(errors, bins, max_dist, path):
+    # group errors into bins
+    delta = max_dist / (2 * bins)
+    binIdx = [max_dist / bins * x - delta for x in range(1, bins + 1)]
+    grouped_data = {k: [] for k in binIdx}
+    for gt, error in errors:
+        if gt <= max_dist:
+            i = np.argmin(list(map(lambda x: abs(gt - x), binIdx)))
+            grouped_data[binIdx[i]].append(error)  # append error to bin
+
+    Nmax = np.max([len(grouped_data[k]) for k in grouped_data])
+    np.random.seed(1)
+    u = np.random.rand(Nmax)
+
+    plotted_errors = np.concatenate(list(grouped_data.values()))
+
+    fig, ax = plt.subplots()
+
+    colorarr = [rgb.tue_blue, rgb.tue_red]
+
+    for count, k in enumerate(grouped_data):
+        ax.plot(grouped_data[k], 0.8 * u[:len(grouped_data[k])] + 0.1 + count, 'o', alpha=0.5,
+                color=colorarr[count % 2], ms=2, mec='none')
+        # perform kernel density estimation
+        if len(grouped_data[k]) > 1:
+            kde = gaussian_kde(grouped_data[k],
+                               bw_method='scott')  # 'scott' or 'silverman' are common choices for bandwidth
+            x_values = np.linspace(np.min(plotted_errors), np.max(plotted_errors), 1000)
+            kde_values = kde(x_values)
+            # normalize kde between 0-1
+            kde_values = 0.8 * kde_values / np.max(kde_values) + 0.1 + count
+            ax.plot(x_values, kde_values, color=rgb.tue_dark, alpha=0.9, linewidth=0.7, linestyle='dashed')
+
+    ax.set_yticks([x + 0.5 for x in range(0, count + 1)])
+    ax.set_yticklabels([f"[{int(k - delta)}, {int(k + delta)})" for k in grouped_data], rotation=90, va="center",
+                       fontsize=7)
+
+    for y, n in zip([0 + x for x in range(0, count + 1)], [len(grouped_data[k]) for k in grouped_data]):
+        ax.axhline(y, color=rgb.tue_dark, alpha=0.5)
+        t = ax.text(np.max(plotted_errors), y + 0.5, str(n).rjust(3, " ") + " samples", color=rgb.tue_dark, va='center',
+                    ha='right', fontsize="x-small")
+        t.set_bbox(dict(facecolor='white', alpha=1.0, linewidth=0, pad=1.0))
+
+    ax.vlines(x=0, ymin=0, ymax=count + 1, colors=rgb.tue_darkgreen, linestyles='dashed', alpha=1, linewidth=1)
+    ax.set_ylabel("Distance Bins")
+    ax.set_xlabel("pred - target [m]")
+    ax.set_ylim(0, count + 1)
+
+    ax.set_title("Distance Prediction Errors")
+
+    plt.savefig(path)
+
+
+def plot_dist_pred(data, path):
+    fig, ax = plt.subplots()
+    for x in data:
+        if x[0] < x[1]:
+            ax.plot(x[0], x[1], 'o', alpha=0.6, color=rgb.tue_blue, markersize=3, mec='none')
+        else:
+            ax.plot(x[0], x[1], 'o', alpha=0.6, color=rgb.tue_red, markersize=3, mec='none')
+    data = np.asarray(data)
+    ax.plot([0, np.max(data[:, 0])], [0, np.max(data[:, 0])], linestyle='--', color=rgb.tue_darkgreen,
+            alpha=1)
+    ax.set_ylabel("Prediction [m]")
+    ax.set_xlabel("Ground Truth Distance [m]")
+    plt.savefig(path)
+
+
+# TODO: plot heading error
+def plot_heading_pred(data, path):
+    fig, ax = plt.subplots()
+    for x in data:
+        # Compute angular error (in degrees)
+        gt = x[0]
+        pred = x[1]
+        diff_deg = min(abs(gt - pred), 360 - abs(gt - pred))
+
+        # Color based on error
+        color = rgb.tue_blue if diff_deg < 30 else rgb.tue_red
+        ax.plot(gt, pred, 'o', alpha=0.6, color=color, markersize=3, mec='none')
+
+    data = np.asarray(data)
+    ax.plot([0, 360], [0, 360], linestyle='--', color=rgb.tue_darkgreen, alpha=1)
+
+    ax.set_ylabel("Predicted Heading")
+    ax.set_xlabel("Ground Truth Heading")
+
+    plt.savefig(path)
+
+
+def plot_heading_err(data, path):
+    data = np.asarray(data)  # shape (N, 2): [gt_heading, pred_heading], both in [0, 1)
+    gt = data[:, 0]
+    pred = data[:, 1]
+
+    # Compute angular error
+    diff = np.abs(gt - pred)
+    angular_error = np.minimum(diff, 360 - diff)
+
+    # Define bins (8 bins = 45° each)
+    bins = np.linspace(0, 360, 9)
+    bin_centers = (bins[:-1] + bins[1:]) / 2
+    bin_errors = []
+    sample_counts = []
+
+    for i in range(8):
+        mask = (gt >= bins[i]) & (gt < bins[i + 1])
+        count = np.sum(mask)
+        sample_counts.append(count)
+        if count > 0:
+            mean_error = angular_error[mask].mean()
+        else:
+            mean_error = 0
+        bin_errors.append(mean_error)
+
+    # Plot
+    plt.figure()
+    bars = plt.bar(bin_centers, bin_errors, width=30, align='center', color='darkgreen')
+    plt.xlabel("Ground Truth Heading (deg)")
+    plt.ylabel("Mean Angular Error (deg)")
+    plt.xticks(bins)
+
+    # Sample count über jedem Balken anzeigen
+    for bar, count in zip(bars, sample_counts):
+        height = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width() / 2, height + 1, str(count),
+                 ha='center', va='bottom', fontsize=9)
+
+    plt.tight_layout()
+    plt.savefig(path)
+
+
+if __name__ == '__main__':
+    plot_results(save_dir='../', results_dir='../../runs/train/BOArDING_cosLoss/results.txt')
+
+
+
