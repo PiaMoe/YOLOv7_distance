@@ -115,8 +115,7 @@ def detect(save_img=False):
         # Process detections
         for i, det in enumerate(pred):  # detections per image
             if det is not None and len(det):
-                det[:, :4] = scale_coords(img.shape[2:], det[:, :4],
-                                          im0s.shape).round()  # auf Originalbildgröße skalieren
+                det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0s.shape).round()  # auf Originalbildgröße skalieren
 
                 crops = []
                 for *xyxy, conf, cls in det:
@@ -151,8 +150,7 @@ def detect(save_img=False):
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
             if len(det):
                 # Rescale boxes from img_size to im0 size
-                det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
-                print(det)
+                #det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
                 # Print results
                 for c in det[:, -3].unique():
                     n = (det[:, -3] == c).sum()  # detections per class
