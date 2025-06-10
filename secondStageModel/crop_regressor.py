@@ -15,10 +15,13 @@ class CropRegressor(nn.Module):
             nn.Flatten(),          # -> [32]
             nn.Linear(32, 64),
             nn.ReLU(),
-            nn.Linear(64, 2)       # Output: [distance, heading]
+            nn.Linear(64, 3)       # Output: [distance, cos(heading), sin(heading)]
         )
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         x = self.cnn(x)
         x = self.fc(x)
+        # Distance sigmoid, heading bleibt unverändert
+        x[:, 0] = self.sigmoid(x[:, 0])
         return x
