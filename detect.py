@@ -126,7 +126,7 @@ def detect(save_img=False):
                     # BGR → RGB → Tensor → Normalisieren [-1, 1]
                     crop_img = cv2.cvtColor(crop_img, cv2.COLOR_BGR2RGB)
                     crop_tensor = TF.to_tensor(crop_img)  # [0,1]
-                    crop_tensor = crop_tensor * 2 - 1  # → [-1, 1] (wie dein Training)
+                    crop_tensor = crop_tensor * 2 - 1  # → [-1, 1]
 
                     crops.append(crop_tensor)
 

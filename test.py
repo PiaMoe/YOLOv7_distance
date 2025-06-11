@@ -7,19 +7,49 @@ from threading import Thread
 import numpy as np
 import torch
 import yaml
+import cv2
 from tqdm import tqdm
-
+from collections import defaultdict
 from models.experimental import attempt_load
 from utils.datasets import create_dataloader
 from utils.general import coco80_to_coco91_class, check_dataset, check_file, check_img_size, check_requirements, \
     box_iou, non_max_suppression, scale_coords, xyxy2xywh, xywh2xyxy, set_logging, increment_path, colorstr
 from utils.metrics import ap_per_class, ConfusionMatrix
-from utils.plots import plot_images, output_to_target, plot_study_txt
+from utils.plots import plot_images, output_to_target, plot_study_txt, plot_dist_err, plot_errors, plot_dist_pred, plot_heading_pred, plot_heading_err
 from utils.torch_utils import select_device, time_synchronized, TracedModel
+from secondStageModel.crop_regressor import CropRegressor
+import torchvision.transforms.functional as TF
 
+def create_distance_bins(max_distance, number_bins):
+    # Calculate the width of each bin
+    bin_width = max_distance / number_bins
+
+    # Create the bins
+    distance_bins = [(i * bin_width, (i + 1) * bin_width) for i in range(number_bins)]
+
+    return distance_bins
+
+def compressBins(error_dict, sample_dict, num_new_bins = 5):
+    # function to compress a dict of n bins to a dict of num_new_bins
+    max_dist = max([k[1] for k in error_dict])    # get max dist
+    delta = max_dist/(2*num_new_bins)
+    compressedBinIdx = [max_dist/num_new_bins * x - delta for x in range(1,num_new_bins+1)] # compute new BinIndices
+    compressedBins = { # initialize compressedBins dict
+        k: {'err':0, 'n':0} for k in compressedBinIdx
+    }
+
+    for k,v in error_dict.items():
+        # find closest compressed bin
+        closestBin = np.argmin(np.asarray(list((map(lambda x: abs(x - (k[0]+k[1])/2), compressedBinIdx)))))
+        compressedBins[compressedBinIdx[closestBin]]['n'] += sample_dict[k]    # increment counter by 1
+        compressedBins[compressedBinIdx[closestBin]]['err'] += v  # add error
+
+    # compute average error
+    return {(k-delta, k+delta): {'err': v['err']/(v['n']+0.0001), 'n': v['n']} for k,v in compressedBins.items()}
 
 def test(data,
          weights=None,
+         weights_reg=None,
          batch_size=32,
          imgsz=640,
          conf_thres=0.001,
@@ -40,7 +70,8 @@ def test(data,
          half_precision=True,
          trace=False,
          is_coco=False,
-         v5_metric=False):
+         v5_metric=False,
+         hyp=None):
     # Initialize/load model and set device
     training = model is not None
     if training:  # called by train.py
@@ -61,6 +92,11 @@ def test(data,
         
         if trace:
             model = TracedModel(model, device, imgsz)
+
+        # Second-stage regressor (distance & heading)
+        modelDH = CropRegressor()
+        modelDH.load_state_dict(torch.load(weights_reg[0], map_location=device))
+        modelDH = modelDH.to(device)
 
     # Half
     half = device.type != 'cpu' and half_precision  # half precision only supported on CUDA
@@ -87,7 +123,7 @@ def test(data,
         if device.type != 'cpu':
             model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
         task = opt.task if opt.task in ('train', 'val', 'test') else 'val'  # path to train/val/test images
-        dataloader = create_dataloader(data[task], imgsz, batch_size, gs, opt, pad=0.5, rect=True,
+        dataloader = create_dataloader(data[task], imgsz, batch_size, gs, opt,pad=0.5, rect=True,
                                        prefix=colorstr(f'{task}: '))[0]
 
     if v5_metric:
@@ -101,6 +137,12 @@ def test(data,
     p, r, f1, mp, mr, map50, map, t0, t1 = 0., 0., 0., 0., 0., 0., 0., 0., 0.
     loss = torch.zeros(3, device=device)
     jdict, stats, ap, ap_class, wandb_images = [], [], [], [], []
+    distance_errors = []
+    dist_errors_plot = []
+    dist_pred_and_gt = []
+    head_errors = []
+    head_errors_plot = []
+    head_pred_and_gt = []
     for batch_i, (img, targets, paths, shapes) in enumerate(tqdm(dataloader, desc=s)):
         img = img.to(device, non_blocking=True)
         img = img.half() if half else img.float()  # uint8 to fp16/32
@@ -127,15 +169,48 @@ def test(data,
 
         # Statistics per image
         for si, pred in enumerate(out):
+            if pred is not None and len(pred):
+                pred[:, :4] = scale_coords(img.shape[2:], pred[:, :4], img.shape).round()  # auf Originalbildgröße skalieren
+
+                crops = []
+                for *xyxy, conf, cls in pred:
+                    x1, y1, x2, y2 = map(int, xyxy)
+                    crop_img = img[y1:y2, x1:x2]  # OpenCV BGR Crop
+                    crop_img = cv2.resize(crop_img, (64, 64))  # Resize wie im Training
+
+                    # BGR → RGB → Tensor → Normalisieren [-1, 1]
+                    crop_img = cv2.cvtColor(crop_img, cv2.COLOR_BGR2RGB)
+                    crop_tensor = TF.to_tensor(crop_img)  # [0,1]
+                    crop_tensor = crop_tensor * 2 - 1  # → [-1, 1]
+
+                    crops.append(crop_tensor)
+
+                if crops:
+                    crop_batch = torch.stack(crops).to(device)  # [N, 3, 64, 64]
+                    with torch.no_grad():
+                        out = modelDH(crop_batch)  # [N, 3], enthält distance_norm, cos, sin
+
+                    distances = out[:, 0].cpu().numpy() #* 1000.0
+                    headings = (torch.atan2(out[:, 2], out[:, 1]) * 180 / torch.pi) % 360
+                    cosh = out[:, 1].cpu().numpy()
+                    sinh = out[:, 2].cpu().numpy()
+                    pred = torch.cat((pred, torch.from_numpy(distances).unsqueeze(1).to(pred.device),
+                                      cosh.unsqueeze(1).to(pred.device), sinh.unsqueeze(1).to(pred.device)), dim=1)
+
             labels = targets[targets[:, 0] == si, 1:]
             nl = len(labels)
             tcls = labels[:, 0].tolist() if nl else []  # target class
+            tdist = labels[:, -3].tolist() if nl else []  # target dist
+            tcosh = labels[:, -2].tolist() if nl else []  # target cos
+            tsinh = labels[:, -1].tolist() if nl else []  # target sin
             path = Path(paths[si])
             seen += 1
 
             if len(pred) == 0:
                 if nl:
-                    stats.append((torch.zeros(0, niou, dtype=torch.bool), torch.Tensor(), torch.Tensor(), tcls))
+                    # Append statistics (correct, conf, pcls, tcls, pdist, tdist, pcosh, tcosh, psinh, tsinh)
+                    stats.append((torch.zeros(0, niou, dtype=torch.bool), torch.Tensor(), torch.Tensor(),
+                                  tcls, torch.Tensor(), tdist, torch.Tensor(), tcosh, torch.Tensor(), tsinh))
                 continue
 
             # Predictions
@@ -145,9 +220,10 @@ def test(data,
             # Append to text file
             if save_txt:
                 gn = torch.tensor(shapes[si][0])[[1, 0, 1, 0]]  # normalization gain whwh
-                for *xyxy, conf, cls in predn.tolist():
+                for *xyxy, conf, cls, dist, cosh, sinh in predn.tolist():
                     xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                    line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
+                    line = (cls, *xywh, conf, dist, cosh, sinh) if save_conf else (
+                    cls, *xywh, dist, cosh, sinh)  # label format
                     with open(save_dir / 'labels' / (path.stem + '.txt'), 'a') as f:
                         f.write(('%g ' * len(line)).rstrip() % line + '\n')
 
@@ -173,7 +249,10 @@ def test(data,
                     jdict.append({'image_id': image_id,
                                   'category_id': coco91class[int(p[5])] if is_coco else int(p[5]),
                                   'bbox': [round(x, 3) for x in b],
-                                  'score': round(p[4], 5)})
+                                  'distance': p[-3],
+                                  'cosh': p[-2],
+                                  'sinh': p[-1],
+                                  'score': round(p[4], 5)}, )
 
             # Assign all predictions as incorrect
             correct = torch.zeros(pred.shape[0], niou, dtype=torch.bool, device=device)
@@ -187,11 +266,14 @@ def test(data,
                 if plots:
                     confusion_matrix.process_batch(predn, torch.cat((labels[:, 0:1], tbox), 1))
 
+                distance_errors_per_cat = {}
+                head_errors_per_cat = {}
                 # Per target class
                 for cls in torch.unique(tcls_tensor):
                     ti = (cls == tcls_tensor).nonzero(as_tuple=False).view(-1)  # prediction indices
                     pi = (cls == pred[:, 5]).nonzero(as_tuple=False).view(-1)  # target indices
-
+                    distance_errors_per_cat[int(cls)] = []
+                    head_errors_per_cat[int(cls)] = []
                     # Search for detections
                     if pi.shape[0]:
                         # Prediction to target ious
@@ -205,11 +287,51 @@ def test(data,
                                 detected_set.add(d.item())
                                 detected.append(d)
                                 correct[pi[j]] = ious[j] > iouv  # iou_thres is 1xn
+
+                                # distances
+                                pred_dist = pred[pi[j], -3]
+                                target_dist = labels[d, -3]
+
+                                # headings
+                                pred_cosh = pred[pi[j], -2]
+                                pred_sinh = pred[pi[j], -1]
+                                target_cosh = labels[d, -2]
+                                target_sinh = labels[d, -1]
+
+                                if target_dist == -1 or (target_cosh == 0 and target_sinh == 0):
+                                    continue
+
+                                    # calculate distance error
+                                pred_conf = pred[pi[j], 4]
+                                distance_error = abs(pred_dist - target_dist)
+                                dist_errors_plot.append(
+                                    [float(target_dist.cpu()), float(pred_dist.cpu() - target_dist.cpu())])
+                                dist_pred_and_gt.append([float(target_dist.cpu()), float(pred_dist.cpu())])
+                                # distance_errors.append(distance_error.item())
+                                distance_conf_and_error_and_gt = [float(pred_conf), float(distance_error),
+                                                                  float(target_dist), float(pred_dist)]
+                                distance_errors_per_cat[int(cls)].append(distance_conf_and_error_and_gt)
+
+                                target_head = torch.rad2deg(torch.arctan2(target_sinh, target_cosh)) % 360
+                                pred_head = torch.rad2deg(torch.arctan2(pred_sinh, pred_cosh)) % 360
+
+                                # calculate heading error
+                                target_head = float(target_head.cpu())
+                                pred_head = float(pred_head.cpu())
+                                heading_error = min(abs(pred_head - target_head), 360 - abs(pred_head - target_head))
+                                head_pred_and_gt.append([target_head, pred_head])
+                                head_errors_plot.append([target_head, heading_error])
+                                head_conf_and_error_and_gt = [float(pred_conf), heading_error, target_head, pred_head]
+                                head_errors_per_cat[int(cls)].append(head_conf_and_error_and_gt)
+
                                 if len(detected) == nl:  # all targets already located in image
                                     break
 
-            # Append statistics (correct, conf, pcls, tcls)
-            stats.append((correct.cpu(), pred[:, 4].cpu(), pred[:, 5].cpu(), tcls))
+                distance_errors.append(distance_errors_per_cat)
+                head_errors.append([head_errors_per_cat])
+            # Append statistics (correct, conf, pcls, tcls, pdist, tdist, pcosh, tcosh, psinh, tsinh)
+            stats.append((correct.cpu(), pred[:, 4].cpu(), pred[:, 5].cpu(), tcls, pred[:, -3].cpu(), tdist,
+                          pred[:, -2].cpu(), tcosh, pred[:, -1].cpu(), tsinh))
 
         # Plot images
         if plots and batch_i < 3:
@@ -220,16 +342,139 @@ def test(data,
 
     # Compute statistics
     stats = [np.concatenate(x, 0) for x in zip(*stats)]  # to numpy
+
+    if hyp is not None:
+        distance_bins = create_distance_bins(hyp["max_distance"], 10)
+    else:
+        distance_bins = create_distance_bins(1000, 10)  # use default dist of 1000 m if no hyperparameters passed
+
     if len(stats) and stats[0].any():
-        p, r, ap, f1, ap_class = ap_per_class(*stats, plot=plots, v5_metric=v5_metric, save_dir=save_dir, names=names)
+        tp, conf, pred_cls, target_cls = stats[:4]
+        p, r, ap, f1, ap_class = ap_per_class(tp, conf, pred_cls, target_cls, plot=plots, v5_metric=v5_metric,
+                                              save_dir=save_dir, names=names)
         ap50, ap = ap[:, 0], ap.mean(1)  # AP@0.5, AP@0.5:0.95
         mp, mr, map50, map = p.mean(), r.mean(), ap50.mean(), ap.mean()
         nt = np.bincount(stats[3].astype(np.int64), minlength=nc)  # number of targets per class
     else:
         nt = torch.zeros(1)
 
+        # Initialize dictionaries to store accumulated weighted errors and total confidences
+    mean_dist_err_boat_bins = defaultdict(float)
+    abs_dist_err_boat_bins = defaultdict(float)
+    total_conf_boat_bins = defaultdict(float)
+    samples_per_bin = defaultdict(int)
+
+    # Initialize variables to store total accumulated weighted errors and confidences
+    total_mean_dist_err_boat = 0  # weighted with conf & relative
+    abs_dist_err_boat = 0  # absolute dist error without conf weights
+    total_conf_boat = 0
+    samples = 0
+    mean_abs_dist_err_boat_comp = None
+    weighted_mean_dist_err_boat_comp = None
+
+    # TODO: does error with confidence make sense?
+    # print(distance_errors)
+    for distance_err in distance_errors:
+        if 0 in distance_err.keys():
+            for obj_disst_pair in distance_err[0]:
+                dconf, derror, gt, pred = obj_disst_pair
+                total_mean_dist_err_boat += dconf * derror / gt
+                abs_dist_err_boat += derror
+                total_conf_boat += dconf
+                samples += 1
+                for bin_min, bin_max in distance_bins:
+                    if bin_min <= gt < bin_max:
+                        bin_key = (bin_min, bin_max)
+                        mean_dist_err_boat_bins[bin_key] += dconf * derror / gt
+                        abs_dist_err_boat_bins[bin_key] += derror
+                        total_conf_boat_bins[bin_key] += dconf
+                        samples_per_bin[bin_key] += 1
+                        break
+
+    # compress bins for console logging
+    if mean_dist_err_boat_bins:
+        mean_abs_dist_err_boat_comp = compressBins(abs_dist_err_boat_bins, samples_per_bin)
+    if mean_dist_err_boat_bins:
+        weighted_mean_dist_err_boat_comp = compressBins(mean_dist_err_boat_bins, total_conf_boat_bins)
+
+    # Calculate the weighted mean distance error for each bin
+    weighted_mean_dist_err_boat_bins = {
+        bin_key: mean_dist_err_boat_bins[bin_key] / total_conf_boat_bins[bin_key]
+        if total_conf_boat_bins[bin_key] > 0 else -1
+        for bin_key in distance_bins
+    }
+
+    # Compute mean of absolute dist error bins
+    mean_abs_dist_err_boat_bins = {
+        bin_key: abs_dist_err_boat_bins[bin_key] / samples_per_bin[bin_key]
+        if samples_per_bin[bin_key] > 0 else -1
+        for bin_key in distance_bins
+    }
+
+    mean_abs_dist_err_boat = abs_dist_err_boat / samples if samples != 0 else -1
+
+    # Calculate the overall weighted mean distance error
+    overall_weighted_mean_dist_err_boat = total_mean_dist_err_boat / total_conf_boat if total_conf_boat > 0 else -1
+    metrics_bin_distances = {}
+
+    # compute combined metric between mAP@0.5:0.95 and err_weighted_dist_rel
+    combined_metric = map * (1 - min(overall_weighted_mean_dist_err_boat, 1))
+
+    # heading error
+    total_head_error = 0.0
+    count = 0
+    for head_errors_per_cat in head_errors:
+        if head_errors_per_cat:
+            category_dict = head_errors_per_cat[0]
+            for class_id, errors in category_dict.items():
+                for entry in errors:
+                    _, heading_error, _, _ = entry
+                    total_head_error += heading_error
+                    count += 1
+    mean_heading_error = total_head_error / count if count > 0 else 0.0
+    mean_heading_error_normalized = mean_heading_error / 180
+
+    # combined metric between mAP@0.5:0.95, err_weighted_dist_rel and mean_heading_error
+    combined_metric_with_head = map * (1 - min(overall_weighted_mean_dist_err_boat, 1)) * (
+                1 - mean_heading_error_normalized)
+
+    # Print the results for each bin
+    if mean_abs_dist_err_boat_comp:
+        for bin_key in mean_abs_dist_err_boat_comp:
+            print(f"Distance bin {bin_key}:")
+            print("  samples: ", mean_abs_dist_err_boat_comp[bin_key]['n'])
+            print("  weighted_reL_dist_err_boat =", weighted_mean_dist_err_boat_comp[bin_key]['err'])
+            print("  abs_mean_dist_err_boat =", mean_abs_dist_err_boat_comp[bin_key]['err'])
+            metrics_bin_distances["metrics/distancebins/weighted_rel_dist_err_boat_" + str(bin_key)] = \
+            weighted_mean_dist_err_boat_comp[bin_key]['err']
+            metrics_bin_distances["metrics/distancebins/abs_mean_dist_err_boat_" + str(bin_key)] = \
+            mean_abs_dist_err_boat_comp[bin_key]['err']
+        if not wandb_logger is None:
+            wandb_logger.log(metrics_bin_distances)
+    else:
+        print("No bounding boxes matched --> no distance error")
+
+    # Print the overall results
+    print("\nTotal Samples: ", samples)
+    print("Overall weighted_rel_dist_err_boat =", overall_weighted_mean_dist_err_boat)
+    print("Overall abs_mean_dist_err_boat =", mean_abs_dist_err_boat)
+    print(f"\nMean heading error = {mean_heading_error:.1f} degrees")
+    print("Combined Metric (MAP & distance) = ", combined_metric)
+    print("Combined_metric (MAP, distance & heading) = ", combined_metric_with_head)
+    metrics_overall_distance = {}
+    metrics_overall_distance["metrics/weighted_rel_dist_err_boat"] = overall_weighted_mean_dist_err_boat
+    metrics_overall_distance["metrics/abs_mean_dist_err_boat"] = mean_abs_dist_err_boat
+    metrics_overall_distance["metrics/combined_metric_mapD"] = combined_metric
+    metrics_heading = {}
+    metrics_heading["metrics/mean_head_err"] = mean_heading_error
+    metrics_heading["metrics/combined_metric_mapDH"] = combined_metric_with_head
+    if not wandb_logger is None:
+        wandb_logger.log(metrics_overall_distance)
+        wandb_logger.log(metrics_heading)
+
     # Print results
-    pf = '%20s' + '%12i' * 2 + '%12.3g' * 4  # print format
+    pf = '%20s' + '%12i' * 2 + '%12.3g' * 4
+    print("classes | seen = preds | nt = GT | mp = precision | mr = recall | mAP50 | mAP50-95")
     print(pf % ('all', seen, nt.sum(), mp, mr, map50, map))
 
     # Print results per class
@@ -244,6 +489,23 @@ def test(data,
 
     # Plots
     if plots:
+        if plots:
+            # plot distance errors
+            plot_dist_err(mean_abs_dist_err_boat_bins, num_samples=samples_per_bin, labelX='GT - Distance [m]',
+                          labelY=r'$\varepsilon_A$', path=os.path.join(save_dir, "AbsoluteError.png"), color='red')
+
+            plot_dist_err(weighted_mean_dist_err_boat_bins, num_samples=samples_per_bin, labelX='GT - Distance [m]',
+                          labelY=r'$\varepsilon_R$', path=os.path.join(save_dir, "RelativeError.png"))
+
+            # plot raw dist errors
+            plot_errors(dist_errors_plot, bins=5, max_dist=distance_bins[-1][1],
+                        path=os.path.join(save_dir, 'dist_errors.pdf'))
+            plot_dist_pred(dist_pred_and_gt, path=os.path.join(save_dir, 'dist_pred.pdf'))
+
+            # plot heading errors
+            plot_heading_pred(head_pred_and_gt, path=os.path.join(save_dir, 'head_pred.pdf'))
+            plot_heading_err(head_pred_and_gt, path=os.path.join(save_dir, 'head_err.pdf'))
+
         confusion_matrix.plot(save_dir=save_dir, names=list(names.values()))
         if wandb_logger and wandb_logger.wandb:
             val_batches = [wandb_logger.wandb.Image(str(f), caption=f.name) for f in sorted(save_dir.glob('test*.jpg'))]
@@ -284,12 +546,20 @@ def test(data,
     maps = np.zeros(nc) + map
     for i, c in enumerate(ap_class):
         maps[c] = ap[i]
-    return (mp, mr, map50, map, *(loss.cpu() / len(dataloader)).tolist()), maps, t
+
+    dist_err = 1 - min(overall_weighted_mean_dist_err_boat, 1)
+    dist_err = round(dist_err, 4)
+    print(f"\nresults:\nmp: {mp}\nmr: {mr}\nmap50: {map50}\nmap: {map}\ndist err: {dist_err}"
+          f"\ncombined metric: {combined_metric}\nlosses: {(loss.cpu() / len(dataloader)).tolist()}")
+    # calculate mean losses (currently summed over all batches)
+    return (mp, mr, map50, map, dist_err, combined_metric,
+            *(loss.cpu() / len(dataloader)).tolist()), maps, t
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='test.py')
-    parser.add_argument('--weights', nargs='+', type=str, default='yolov7.pt', help='model.pt path(s)')
+    parser.add_argument('--weightsYOLO', nargs='+', type=str, default='yolov7.pt', help='model.pt path(s)')
+    parser.add_argument('--weightsRegressor', nargs='+', type=str, default='yolov7.pt', help='model.pt path(s)')
     parser.add_argument('--data', type=str, default='data/coco.yaml', help='*.data path')
     parser.add_argument('--batch-size', type=int, default=32, help='size of each image batch')
     parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
@@ -309,6 +579,7 @@ if __name__ == '__main__':
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--no-trace', action='store_true', help='don`t trace model')
     parser.add_argument('--v5-metric', action='store_true', help='assume maximum recall as 1.0 in AP calculation')
+    parser.add_argument('--hyp', type=str, default='', help='hyperparameters path')
     opt = parser.parse_args()
     opt.save_json |= opt.data.endswith('coco.yaml')
     opt.data = check_file(opt.data)  # check file
@@ -317,7 +588,8 @@ if __name__ == '__main__':
 
     if opt.task in ('train', 'val', 'test'):  # run normally
         test(opt.data,
-             opt.weights,
+             opt.weightsYOLO,
+             opt.weightsRegressor,
              opt.batch_size,
              opt.img_size,
              opt.conf_thres,
@@ -330,7 +602,8 @@ if __name__ == '__main__':
              save_hybrid=opt.save_hybrid,
              save_conf=opt.save_conf,
              trace=not opt.no_trace,
-             v5_metric=opt.v5_metric
+             v5_metric=opt.v5_metric,
+             hyp=opt.hyp
              )
 
     elif opt.task == 'speed':  # speed benchmarks
