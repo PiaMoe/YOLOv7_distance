@@ -123,8 +123,8 @@ def test(data,
         if device.type != 'cpu':
             model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
         task = opt.task if opt.task in ('train', 'val', 'test') else 'val'  # path to train/val/test images
-        dataloader = create_dataloader(data[task], imgsz, batch_size, gs, opt,pad=0.5, rect=True,
-                                       prefix=colorstr(f'{task}: '))[0]
+        dataloader = create_dataloader(data[task], imgsz, batch_size, gs, opt, pad=0.5, rect=True,
+                                       prefix=task, traintestval='test')[0]
 
     if v5_metric:
         print("Testing with YOLOv5 AP metric...")
@@ -134,7 +134,7 @@ def test(data,
     names = {k: v for k, v in enumerate(model.names if hasattr(model, 'names') else model.module.names)}
     coco91class = coco80_to_coco91_class()
     s = ('%20s' + '%12s' * 6) % ('Class', 'Images', 'Labels', 'P', 'R', 'mAP@.5', 'mAP@.5:.95')
-    p, r, f1, mp, mr, map50, map, t0, t1 = 0., 0., 0., 0., 0., 0., 0., 0., 0.
+    p, r, f1, mp, mr, map50, MAP, t0, t1 = 0., 0., 0., 0., 0., 0., 0., 0., 0.
     loss = torch.zeros(3, device=device)
     jdict, stats, ap, ap_class, wandb_images = [], [], [], [], []
     distance_errors = []
@@ -160,8 +160,9 @@ def test(data,
             if compute_loss:
                 loss += compute_loss([x.float() for x in train_out], targets)[1][:3]  # box, obj, cls
 
+            #print(out)
             # Run NMS
-            targets[:, 2:] *= torch.Tensor([width, height, width, height]).to(device)  # to pixels
+            targets[:, 2:-3] *= torch.Tensor([width, height, width, height]).to(device)  # to pixels
             lb = [targets[targets[:, 0] == i, 1:] for i in range(nb)] if save_hybrid else []  # for autolabelling
             t = time_synchronized()
             out = non_max_suppression(out, conf_thres=conf_thres, iou_thres=iou_thres, labels=lb, multi_label=True)
@@ -170,32 +171,29 @@ def test(data,
         # Statistics per image
         for si, pred in enumerate(out):
             if pred is not None and len(pred):
-                pred[:, :4] = scale_coords(img.shape[2:], pred[:, :4], img.shape).round()  # auf Originalbildgröße skalieren
-
+                im0 = img[si].permute(1, 2, 0).cpu().numpy() * 255
+                im0 = im0.astype(np.uint8)
+                pred[:, :4] = scale_coords(img[si].shape[1:], pred[:, :4], im0.shape).round()  # scale to correct size
                 crops = []
                 for *xyxy, conf, cls in pred:
                     x1, y1, x2, y2 = map(int, xyxy)
-                    crop_img = img[y1:y2, x1:x2]  # OpenCV BGR Crop
-                    crop_img = cv2.resize(crop_img, (64, 64))  # Resize wie im Training
 
-                    # BGR → RGB → Tensor → Normalisieren [-1, 1]
+                    crop_img = im0[y1:y2, x1:x2]
+                    crop_img = cv2.resize(crop_img, (64, 64))
                     crop_img = cv2.cvtColor(crop_img, cv2.COLOR_BGR2RGB)
-                    crop_tensor = TF.to_tensor(crop_img)  # [0,1]
-                    crop_tensor = crop_tensor * 2 - 1  # → [-1, 1]
-
+                    crop_tensor = TF.to_tensor(crop_img) * 2 - 1
                     crops.append(crop_tensor)
 
                 if crops:
-                    crop_batch = torch.stack(crops).to(device)  # [N, 3, 64, 64]
+                    crop_batch = torch.stack(crops).to(device)
                     with torch.no_grad():
-                        out = modelDH(crop_batch)  # [N, 3], enthält distance_norm, cos, sin
+                        outDH = modelDH(crop_batch)
 
-                    distances = out[:, 0].cpu().numpy() #* 1000.0
-                    headings = (torch.atan2(out[:, 2], out[:, 1]) * 180 / torch.pi) % 360
-                    cosh = out[:, 1].cpu().numpy()
-                    sinh = out[:, 2].cpu().numpy()
-                    pred = torch.cat((pred, torch.from_numpy(distances).unsqueeze(1).to(pred.device),
-                                      cosh.unsqueeze(1).to(pred.device), sinh.unsqueeze(1).to(pred.device)), dim=1)
+                    distances = outDH[:, 0] * hyp["max_distance"]
+                    cosh = outDH[:, 1]
+                    sinh = outDH[:, 2]
+                    pred = torch.cat((pred, distances.unsqueeze(1), cosh.unsqueeze(1), sinh.unsqueeze(1)), dim=1)
+                    out[si] = pred
 
             labels = targets[targets[:, 0] == si, 1:]
             nl = len(labels)
@@ -334,7 +332,7 @@ def test(data,
                           pred[:, -2].cpu(), tcosh, pred[:, -1].cpu(), tsinh))
 
         # Plot images
-        if plots and batch_i < 3:
+        if plots and batch_i < 10:
             f = save_dir / f'test_batch{batch_i}_labels.jpg'  # labels
             Thread(target=plot_images, args=(img, targets, paths, f, names), daemon=True).start()
             f = save_dir / f'test_batch{batch_i}_pred.jpg'  # predictions
@@ -353,7 +351,7 @@ def test(data,
         p, r, ap, f1, ap_class = ap_per_class(tp, conf, pred_cls, target_cls, plot=plots, v5_metric=v5_metric,
                                               save_dir=save_dir, names=names)
         ap50, ap = ap[:, 0], ap.mean(1)  # AP@0.5, AP@0.5:0.95
-        mp, mr, map50, map = p.mean(), r.mean(), ap50.mean(), ap.mean()
+        mp, mr, map50, MAP = p.mean(), r.mean(), ap50.mean(), ap.mean()
         nt = np.bincount(stats[3].astype(np.int64), minlength=nc)  # number of targets per class
     else:
         nt = torch.zeros(1)
@@ -418,7 +416,7 @@ def test(data,
     metrics_bin_distances = {}
 
     # compute combined metric between mAP@0.5:0.95 and err_weighted_dist_rel
-    combined_metric = map * (1 - min(overall_weighted_mean_dist_err_boat, 1))
+    combined_metric = MAP * (1 - min(overall_weighted_mean_dist_err_boat, 1))
 
     # heading error
     total_head_error = 0.0
@@ -435,7 +433,7 @@ def test(data,
     mean_heading_error_normalized = mean_heading_error / 180
 
     # combined metric between mAP@0.5:0.95, err_weighted_dist_rel and mean_heading_error
-    combined_metric_with_head = map * (1 - min(overall_weighted_mean_dist_err_boat, 1)) * (
+    combined_metric_with_head = MAP * (1 - min(overall_weighted_mean_dist_err_boat, 1)) * (
                 1 - mean_heading_error_normalized)
 
     # Print the results for each bin
@@ -475,7 +473,7 @@ def test(data,
     # Print results
     pf = '%20s' + '%12i' * 2 + '%12.3g' * 4
     print("classes | seen = preds | nt = GT | mp = precision | mr = recall | mAP50 | mAP50-95")
-    print(pf % ('all', seen, nt.sum(), mp, mr, map50, map))
+    print(pf % ('all', seen, nt.sum(), mp, mr, map50, MAP))
 
     # Print results per class
     if (verbose or (nc < 50 and not training)) and nc > 1 and len(stats):
@@ -534,7 +532,7 @@ def test(data,
             eval.evaluate()
             eval.accumulate()
             eval.summarize()
-            map, map50 = eval.stats[:2]  # update results (mAP@0.5:0.95, mAP@0.5)
+            MAP, map50 = eval.stats[:2]  # update results (mAP@0.5:0.95, mAP@0.5)
         except Exception as e:
             print(f'pycocotools unable to run: {e}')
 
@@ -543,7 +541,7 @@ def test(data,
     if not training:
         s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
         print(f"Results saved to {save_dir}{s}")
-    maps = np.zeros(nc) + map
+    maps = np.zeros(nc) + MAP
     for i, c in enumerate(ap_class):
         maps[c] = ap[i]
 
@@ -552,21 +550,21 @@ def test(data,
     print(f"\nresults:\nmp: {mp}\nmr: {mr}\nmap50: {map50}\nmap: {map}\ndist err: {dist_err}"
           f"\ncombined metric: {combined_metric}\nlosses: {(loss.cpu() / len(dataloader)).tolist()}")
     # calculate mean losses (currently summed over all batches)
-    return (mp, mr, map50, map, dist_err, combined_metric,
+    return (mp, mr, map50, MAP, dist_err, combined_metric,
             *(loss.cpu() / len(dataloader)).tolist()), maps, t
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='test.py')
-    parser.add_argument('--weightsYOLO', nargs='+', type=str, default='yolov7.pt', help='model.pt path(s)')
-    parser.add_argument('--weightsRegressor', nargs='+', type=str, default='yolov7.pt', help='model.pt path(s)')
-    parser.add_argument('--data', type=str, default='data/coco.yaml', help='*.data path')
-    parser.add_argument('--batch-size', type=int, default=32, help='size of each image batch')
-    parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
+    parser.add_argument('--weightsYOLO', nargs='+', type=str, default='../runs/train/BOArDING_Det/weights/best.pt', help='model.pt path(s)')
+    parser.add_argument('--weightsRegressor', nargs='+', type=str, default= ['secondStageModel/experiment_1/best.pth'], help='model.pt path(s)')
+    parser.add_argument('--data', type=str, default='data/BOArDING.yaml', help='*.data path')
+    parser.add_argument('--batch-size', type=int, default=4, help='size of each image batch')
+    parser.add_argument('--img-size', type=int, default=1024, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.001, help='object confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.65, help='IOU threshold for NMS')
-    parser.add_argument('--task', default='val', help='train, val, test, speed or study')
-    parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
+    parser.add_argument('--task', default='test', help='train, val, test, speed or study')
+    parser.add_argument('--device', default='0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--single-cls', action='store_true', help='treat as single-class dataset')
     parser.add_argument('--augment', action='store_true', help='augmented inference')
     parser.add_argument('--verbose', action='store_true', help='report mAP by class')
@@ -575,16 +573,30 @@ if __name__ == '__main__':
     parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
     parser.add_argument('--save-json', action='store_true', help='save a cocoapi-compatible JSON results file')
     parser.add_argument('--project', default='runs/test', help='save to project/name')
-    parser.add_argument('--name', default='exp', help='save to project/name')
+    parser.add_argument('--name', default='2stage_val', help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--no-trace', action='store_true', help='don`t trace model')
     parser.add_argument('--v5-metric', action='store_true', help='assume maximum recall as 1.0 in AP calculation')
-    parser.add_argument('--hyp', type=str, default='', help='hyperparameters path')
+    parser.add_argument('--hyp', type=str, default='data/hyp.scratch.p5.yaml', help='hyperparameters path')
     opt = parser.parse_args()
     opt.save_json |= opt.data.endswith('coco.yaml')
     opt.data = check_file(opt.data)  # check file
     print(opt)
     #check_requirements()
+
+    # load hyperparameters (for distance rescaling)
+    hyp = None
+    if opt.hyp != '':  # if hyp param file was passed
+        try:
+            with open(opt.hyp) as f:
+                hyp = yaml.load(f, Loader=yaml.SafeLoader)  # load hyps
+        except FileNotFoundError:
+            print("Path to hyperparameter file " + str(opt.hyp) + " does not exist.")
+            raise FileNotFoundError
+    else:
+        print("No Hyperparameter file passed to test script")
+        print("Using default max dist of 1000 to compute dist bins")
+        print("Use the --hyp argument to provide path to the file")
 
     if opt.task in ('train', 'val', 'test'):  # run normally
         test(opt.data,
@@ -603,7 +615,7 @@ if __name__ == '__main__':
              save_conf=opt.save_conf,
              trace=not opt.no_trace,
              v5_metric=opt.v5_metric,
-             hyp=opt.hyp
+             hyp=hyp
              )
 
     elif opt.task == 'speed':  # speed benchmarks
