@@ -95,7 +95,7 @@ def evaluate_logs(csv_dir):
     for epoch, df in epoch_data.items():
         print(f"Epoche {epoch}: {len(df)} gültige Einträge")
 
-        fig, axes = plt.subplots(3, 3, figsize=(12, 10))
+        fig, axes = plt.subplots(2, 3, figsize=(12, 10))
         fig.suptitle(f"Verteilung der Vorhersagen – Epoche {epoch}", fontsize=16)
 
         columns = ["x", "y", "w", "h", "obj", "class_0"]
@@ -113,5 +113,5 @@ def evaluate_logs(csv_dir):
 
 if __name__ == "__main__":
 
-    csv_dir = "../../runs/train/BOArDING_log/preds"
+    csv_dir = "../../runs/train/BOArDING_Det/preds"
     evaluate_logs(csv_dir)
