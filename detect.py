@@ -128,7 +128,7 @@ def detect(save_img=False):
                 # Write results
                 for *xyxy, conf, cls, distance, cosh, sinh in reversed(det):
                     heading_rad = torch.arctan2(sinh, cosh)  # in radians [-π, π]
-                    heading_deg = torch.degrees(heading_rad) % 360  # wrap to [0, 360)
+                    heading_deg = torch.rad2deg(heading_rad) % 360  # wrap to [0, 360)
                     heading = heading_deg
                     if save_txt:  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
