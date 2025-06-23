@@ -25,11 +25,9 @@ def log_predictions(tensor, epoch, batch_i, output_dir, sample_prob=0.001, col_n
     os.makedirs(output_dir, exist_ok=True)
 
     if epoch % 10 == 0 and batch_i % 4 == 0:
-        # bs = batch size, na = num
         bs, na, ny, nx, no = tensor.shape
         flat = tensor.view(bs * na * ny * nx, no)
 
-        # random sample (1 %)
         mask = torch.rand(flat.shape[0]) < sample_prob
         sampled = flat[mask]
 
@@ -37,15 +35,29 @@ def log_predictions(tensor, epoch, batch_i, output_dir, sample_prob=0.001, col_n
             return
 
         np_data = sampled.detach().cpu().numpy()
-
-        # name CSV-file
-        #now = datetime.now().strftime("%Y%m%d_%H%M%S")
         fname = f"pred_epoch{epoch}_batch{batch_i}.csv"
         fpath = os.path.join(output_dir, fname)
 
-        # save
-        header = ",".join(col_names) if col_names else None
-        np.savetxt(fpath, np_data, delimiter=",", header=header if header else "", comments="")
+        if os.path.exists(fpath):
+            df_existing = pd.read_csv(fpath)
+            existing_cols = list(df_existing.columns)
+            if col_names:
+                missing_cols = [col for col in col_names if col not in existing_cols]
+                if missing_cols:
+                    # Add missing columns with NaN
+                    for col in missing_cols:
+                        df_existing[col] = float('nan')
+                    # Reorder columns to match col_names
+                    df_existing = df_existing.reindex(columns=col_names)
+            else:
+                col_names = existing_cols
+            # Append new data
+            df_new = pd.DataFrame(np_data, columns=col_names)
+            df_combined = pd.concat([df_existing, df_new], ignore_index=True)
+            df_combined.to_csv(fpath, index=False)
+        else:
+            header = ",".join(col_names) if col_names else None
+            np.savetxt(fpath, np_data, delimiter=",", header=header if header else "", comments="")
         print(f"saved predictions to {fpath}")
 
 def safe_read_csv(file):
@@ -113,6 +125,6 @@ def evaluate_logs(csv_dir):
 
 if __name__ == "__main__":
 
-    csv_dir = "../../runs/train/BOArDING_log/preds"
+    csv_dir = "../../runs/train/BOArDING_sc_aug/preds"
     evaluate_logs(csv_dir)
 

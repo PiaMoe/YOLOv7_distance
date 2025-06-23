@@ -469,7 +469,8 @@ class ComputeLoss:
         self.ssi = list(det.stride).index(16) if autobalance else 0  # stride 16 index
         self.BCEcls, self.BCEobj, self.gr, self.hyp, self.autobalance = BCEcls, BCEobj, model.gr, h, autobalance
         for k in 'na', 'nc', 'nl', 'anchors':
-            setattr(self, k, getattr(det, k))
+            if hasattr(det, k): # check if attribute exists (dist and head have no nc attribute)
+                setattr(self, k, getattr(det, k))
 
     def __call__(self, p, targets):  # predictions, targets, model
         device = targets.device
@@ -485,7 +486,6 @@ class ComputeLoss:
             distance = distances[i]
             cosh = cosines[i]
             sinh = sines[i]
-            heading = torch.stack((cosh, sinh), dim=1)
             n = b.shape[0]  # number of targets
             if n:
                 ps = pi[b, a, gj, gi]  # prediction subset corresponding to targets
@@ -640,11 +640,12 @@ class ComputeLossOTA:
             BCEcls, BCEobj = FocalLoss(BCEcls, g), FocalLoss(BCEobj, g)
 
         det = model.module.model[-1] if is_parallel(model) else model.model[-1]  # Detect() module
-        self.balance = {3: [4.0, 1.0, 0.4]}.get(det.nl, [4.0, 1.0, 0.25, 0.06, .02])  # P3-P7
-        self.ssi = list(det.stride).index(16) if autobalance else 0  # stride 16 index
+        self.balance = {3: [4.0, 1.0, 0.4]}.get(getattr(det, 'nl', 0), [4.0, 1.0, 0.25, 0.06, .02])  # P3-P7
+        self.ssi = list(getattr(det, 'stride', [16])).index(16) if autobalance and hasattr(det, 'stride') else 0  # stride 16 index
         self.BCEcls, self.BCEobj, self.gr, self.hyp, self.autobalance = BCEcls, BCEobj, model.gr, h, autobalance
-        for k in 'na', 'nc', 'nl', 'anchors', 'stride':
-            setattr(self, k, getattr(det, k))
+        for k in ('na', 'nc', 'nl', 'anchors', 'stride'):
+            if hasattr(det, k):     # check if attribute exists (dist and head have no nc attribute)
+                setattr(self, k, getattr(det, k))
 
     def __call__(self, p, targets, imgs):  # predictions, targets, model   
         device = targets.device

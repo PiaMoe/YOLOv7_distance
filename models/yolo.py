@@ -44,21 +44,33 @@ class IDistance(nn.Module):
             self.nl = len(anchors) # number of detection layers
             self.na = len(anchors[0]) // 2 # number of anchors
             self.grid = [torch.zeros(1)] * self.nl
+            a = torch.tensor(anchors).float().view(self.nl, -1, 2)
+            self.register_buffer('anchors', a)  # shape(nl,na,2)
+            self.register_buffer('anchor_grid', a.clone().view(self.nl, 1, -1, 1, 1, 2))  # shape(nl,1,na,1,1,2)
             self.m = nn.ModuleList(nn.Conv2d(x, self.na * 1, 1) for x in ch)  # 1 = distance
 
-        # TODO: forward
-        def forward(self, x):
+        def forward(self, x, epoch=1, batch_i=1):
+            self.epoch = epoch
+            self.batch_i = batch_i
             z = []
             for i in range(self.nl):
                 x[i] = self.m[i](x[i])
                 bs, _, ny, nx = x[i].shape
                 x[i] = x[i].view(bs, self.na, 1, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
+                # TODO: logging
+                # log model outputs
+                raw = x[i].detach().cpu()  # shape: (bs, na, ny, nx, no)
+                log_predictions(raw, self.epoch, self.batch_i, output_dir="preds/", sample_prob=0.01,
+                                col_names=["distance"])
                 if not self.training:
                     if self.grid[i].shape[2:4] != x[i].shape[2:4]:
                         self.grid[i] = self._make_grid(nx, ny).to(x[i].device)
                     y = x[i].sigmoid()
                     y[..., -1] = self.rescale_dist(y[..., -1])  # rescale dist based on norm strategy
                     z.append(y.view(bs, -1, 1))
+
+            # returns if training: List of 3 tensors, shape: [batch_size, num_anchors, height, width, 1]
+            # if inference: z of shape [B, A * H * W, 1]
             return x if self.training else (torch.cat(z, 1), x)
 
         def rescale_dist(self, dist_pred_normalized):
@@ -93,14 +105,24 @@ class IHeading(nn.Module):
         self.nl = len(anchors)
         self.na = len(anchors[0]) // 2
         self.grid = [torch.zeros(1)] * self.nl
+        a = torch.tensor(anchors).float().view(self.nl, -1, 2)
+        self.register_buffer('anchors', a)  # shape(nl,na,2)
+        self.register_buffer('anchor_grid', a.clone().view(self.nl, 1, -1, 1, 1, 2))  # shape(nl,1,na,1,1,2)
         self.m = nn.ModuleList(nn.Conv2d(x, self.na * 2, 1) for x in ch)  # 2 = sin, cos
 
-    def forward(self, x):
+    def forward(self, x, epoch=1, batch_i=1):
+        self.epoch = epoch
+        self.batch_i = batch_i
         z = []
         for i in range(self.nl):
             x[i] = self.m[i](x[i])
             bs, _, ny, nx = x[i].shape
             x[i] = x[i].view(bs, self.na, 2, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
+            # TODO: logging
+            # log model outputs
+            raw = x[i].detach().cpu()  # shape: (bs, na, ny, nx, no)
+            log_predictions(raw, self.epoch, self.batch_i, output_dir="preds/", sample_prob=0.01,
+                            col_names=["sinH", "cosH"])
             if not self.training:
                 if self.grid[i].shape[2:4] != x[i].shape[2:4]:
                     self.grid[i] = self._make_grid(nx, ny).to(x[i].device)
@@ -110,6 +132,8 @@ class IHeading(nn.Module):
                 cos_sin = F.normalize(cos_sin, dim=-1)
                 y[..., 0:2] = cos_sin
                 z.append(y.view(bs, -1, 2))
+        # returns if training: List of 3 tensors, shape: [batch_size, num_anchors, height, width, 2]
+        # if inference: z of shape [B, A * H * W, 2]
         return x if self.training else (torch.cat(z, 1), x)
 
     @staticmethod
@@ -257,7 +281,7 @@ class IDetect(nn.Module):
                 y[..., 0:2] = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy
                 y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
                 z.append(y.view(bs, -1, self.no))
-
+        # output = ???
         return x if self.training else (torch.cat(z, 1), x)
 
     def fuseforward(self, x, epoch=1, batch_i=1):
@@ -662,14 +686,15 @@ class Model(nn.Module):
             self.stride = m.stride
             self._initialize_biases()  # only run once
             # print('Strides: %s' % m.stride.tolist())
-        if isinstance(m, IDetect):
+        if isinstance(m, (IDetect, IDistance, IHeading)):
             s = 256  # 2x min stride
             m.stride = torch.tensor([s / x.shape[-2] for x in self.forward(torch.zeros(1, ch, s, s))])  # forward
             check_anchor_order(m)
             m.anchors /= m.stride.view(-1, 1, 1)
             self.stride = m.stride
-            self._initialize_biases()  # only run once
             # print('Strides: %s' % m.stride.tolist())
+        if isinstance(m, IDetect):
+            self._initialize_biases()  # only run once
         if isinstance(m, IAuxDetect):
             s = 256  # 2x min stride
             m.stride = torch.tensor([s / x.shape[-2] for x in self.forward(torch.zeros(1, ch, s, s))[:4]])  # forward
@@ -723,6 +748,7 @@ class Model(nn.Module):
 
     def forward_once(self, x, profile=False, epoch=1, batch_i=1):
         y, dt = [], []  # outputs
+        detect_out, distance_out, heading_out = None, None, None
         for m in self.model:
             if m.f != -1:  # if not from previous layer
                 x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
@@ -746,15 +772,37 @@ class Model(nn.Module):
                 print('%10.1f%10.0f%10.1fms %-40s' % (o, m.np, dt[-1], m.type))
 
             if isinstance(m, IDetect):
-                x = m(x, epoch=epoch, batch_i=batch_i)  # run
+                detect_out = m(x, epoch=epoch, batch_i=batch_i)  # Liste von Tensors
+                x = detect_out  # x für nächsten Layer setzen, falls nötig
+            elif isinstance(m, IDistance):
+                distance_out = m(x, epoch=epoch, batch_i=batch_i)  # Liste von Tensors oder Tensor
+            elif isinstance(m, IHeading):
+                heading_out = m(x, epoch=epoch, batch_i=batch_i)  # Liste von Tensors oder Tensor
             else:
-                x = m(x)  # run
+                x = m(x)
 
-            y.append(x if m.i in self.save else None)  # save output
+            y.append(x if m.i in self.save else None)
 
         if profile:
             print('%.1fms total' % sum(dt))
-        return x
+
+        def flatten_output(outputs):
+            if isinstance(outputs, list):
+                return torch.cat([o.view(o.size(0), -1, o.size(-1)) for o in outputs], dim=1)
+            return outputs
+        detect_out = flatten_output(detect_out)
+        distance_out = flatten_output(distance_out)
+        heading_out = flatten_output(heading_out)
+
+        # Logging
+        print("detect_out shape: " + str(detect_out.shape))
+        print("distance_out shape: " + str(distance_out.shape))
+        print("heading_out shape: " + str(heading_out.shape))
+
+        # Concatenate
+        output = torch.cat([detect_out, distance_out, heading_out], dim=-1)
+        print("output shape: " + str(output.shape))
+        return output
 
     def _initialize_biases(self, cf=None):  # initialize biases into Detect(), cf is class frequency
         # https://arxiv.org/abs/1708.02002 section 3.3
@@ -863,7 +911,7 @@ def parse_model(d, ch, hyp=None):  # model_dict, input_channels(3)
     logger.info('\n%3s%18s%3s%10s  %-40s%-30s' % ('', 'from', 'n', 'params', 'module', 'arguments'))
     anchors, nc, gd, gw = d['anchors'], d['nc'], d['depth_multiple'], d['width_multiple']
     na = (len(anchors[0]) // 2) if isinstance(anchors, list) else anchors  # number of anchors
-    no = na * (nc + 5)  # number of outputs = anchors * (classes + 5 + 1)
+    no = na * (nc + 5)  # number of outputs = anchors * (classes + 5)
 
     layers, save, c2 = [], [], ch[-1]  # layers, savelist, ch out
     for i, (f, n, m, args) in enumerate(d['backbone'] + d['head']):  # from, number, module, args
@@ -913,11 +961,17 @@ def parse_model(d, ch, hyp=None):  # model_dict, input_channels(3)
             c2 = ch[f[0]]
         elif m is Foldcut:
             c2 = ch[f] // 2
-        elif m in [Detect, IDetect, IAuxDetect, IBin, IKeypoint, IDistance, IHeading]:
-            args.append([ch[x] for x in f])
-            args.append(hyp)
+        elif m in [Detect, IDetect, IAuxDetect, IBin, IKeypoint]:
+            args.append([ch[x] for x in f]) # Feature map channels
             if isinstance(args[1], int):  # number of anchors
                 args[1] = [list(range(args[1] * 2))] * len(f)
+        elif m in [IDistance]:
+            args.append([ch[x] for x in f])
+            args.append(hyp) # Hyperparameters for distance
+            c2 = 1 # number of outputs
+        elif m in [IHeading]:
+            args.append([ch[x] for x in f])
+            c2 = 2
         elif m is ReOrg:
             c2 = ch[f] * 4
         elif m is Contract:
