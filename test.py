@@ -154,7 +154,9 @@ def test(data,
             # Run model
             t = time_synchronized()
             detect_out, distance_out, heading_out = model(img, augment=augment)  # inference and training outputs
-            detect_out, train_out = detect_out
+            detect_out, detect_train_out = detect_out
+            distance_out, distance_train_out = distance_out
+            heading_out, heading_train_out = heading_out
             t0 += time_synchronized() - t
 
             # Compute loss
@@ -188,7 +190,7 @@ def test(data,
                 pred_det = [x.float for x in detect_out]
                 pred_dis = [x.float for x in distance_out]
                 pred_head = [x.float for x in heading_out]
-                L = compute_loss(pred_det, pred_dis, pred_head, targets.to(device))[1][:5]  # box, obj, cls, dist, heading
+                L = compute_loss(pred_det, pred_dis, pred_head, loss_targets)[1][:5]  # box, obj, cls, dist, heading
                 L = torch.round(L * 1e4) / 1e4
                 loss += L
 
@@ -201,7 +203,7 @@ def test(data,
 
         # Statistics per image
 
-        for si, pred in enumerate(detect_out):
+        for si, det_pred in enumerate(detect_out):
             labels = targets[targets[:, 0] == si, 1:]
             nl = len(labels)
             tcls = labels[:, 0].tolist() if nl else []  # target class
@@ -211,7 +213,7 @@ def test(data,
             path = Path(paths[si])
             seen += 1
 
-            if len(pred) == 0:
+            if len(det_pred) == 0:
                 if nl:
                     # Append statistics (correct, conf, pcls, tcls, pdist, tdist, pcosh, tcosh, psinh, tsinh)
                     stats.append((torch.zeros(0, niou, dtype=torch.bool), torch.Tensor(), torch.Tensor(),
@@ -219,8 +221,10 @@ def test(data,
                 continue
 
             # Predictions
-            predn = pred.clone()
-            scale_coords(img[si].shape[1:], predn[:, :6], shapes[si][0], shapes[si][1])  # native-space pred
+            det_predn = det_pred.clone()
+            dist_predn = distance_out[si]
+            head_predn = heading_out[si]
+            scale_coords(img[si].shape[1:], det_predn[:, :6], shapes[si][0], shapes[si][1])  # native-space pred
 
             # Append to text file
             if save_txt:
