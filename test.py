@@ -154,6 +154,7 @@ def test(data,
             # Run model
             t = time_synchronized()
             out, train_out = model(img, augment=augment)  # inference and training outputs
+            detect_out, distance_out, heading_out = train_out
             t0 += time_synchronized() - t
 
             # Compute loss
@@ -184,7 +185,10 @@ def test(data,
                 # heading normalization in loss function
 
                 # compute val losses
-                L = compute_loss([x.float() for x in train_out], loss_targets)[1][:5]  # box, obj, cls, dist, heading
+                pred_det = [x.float for x in detect_out]
+                pred_dis = [x.float for x in distance_out]
+                pred_head = [x.float for x in heading_out]
+                L = compute_loss(pred_det, pred_dis, pred_head, targets.to(device))[1][:5]  # box, obj, cls, dist, heading
                 L = torch.round(L * 1e4) / 1e4
                 loss += L
 

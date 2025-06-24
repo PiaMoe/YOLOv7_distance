@@ -468,19 +468,20 @@ class ComputeLoss:
         #self.balance = {3: [4.0, 1.0, 0.4]}.get(det.nl, [4.0, 1.0, 0.5, 0.4, .1])  # P3-P7
         self.ssi = list(det.stride).index(16) if autobalance else 0  # stride 16 index
         self.BCEcls, self.BCEobj, self.gr, self.hyp, self.autobalance = BCEcls, BCEobj, model.gr, h, autobalance
+        self.nc = 0  # number of classes
         for k in 'na', 'nc', 'nl', 'anchors':
             if hasattr(det, k): # check if attribute exists (dist and head have no nc attribute)
                 setattr(self, k, getattr(det, k))
 
-    def __call__(self, p, targets):  # predictions, targets, model
+    def __call__(self, p_det, p_dis, p_head, targets):  # predictions, targets, model
         device = targets.device
         lcls, lbox, lobj = torch.zeros(1, device=device), torch.zeros(1, device=device), torch.zeros(1, device=device)
         ldist = torch.zeros(1, device=device)
         lhead = torch.zeros(1, device=device)
-        tcls, tbox, indices, anchors, distances, cosines, sines = self.build_targets(p, targets)  # targets
+        tcls, tbox, indices, anchors, distances, cosines, sines = self.build_targets(p_det, targets)  # targets
 
         # Losses
-        for i, pi in enumerate(p):  # layer index, layer predictions
+        for i, pi in enumerate(p_det):  # layer index, layer predictions
             b, a, gj, gi = indices[i]  # image, anchor, gridy, gridx
             tobj = torch.zeros_like(pi[..., 0], device=device)  # target obj
             distance = distances[i]
@@ -488,11 +489,13 @@ class ComputeLoss:
             sinh = sines[i]
             n = b.shape[0]  # number of targets
             if n:
-                ps = pi[b, a, gj, gi]  # prediction subset corresponding to targets
+                ps_det = pi[b, a, gj, gi]  # prediction subset corresponding to targets
+                ps_dis = p_dis[i][b, a, gj, gi]  # distance predictions
+                ps_head = p_head[i][b, a, gj, gi]  # heading predictions
 
                 # Regression
-                pxy = ps[:, :2].sigmoid() * 2. - 0.5
-                pwh = (ps[:, 2:4].sigmoid() * 2) ** 2 * anchors[i]
+                pxy = ps_det[:, :2].sigmoid() * 2. - 0.5
+                pwh = (ps_det[:, 2:4].sigmoid() * 2) ** 2 * anchors[i]
                 pbox = torch.cat((pxy, pwh), 1)  # predicted box
                 iou = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, CIoU=True)  # iou(prediction, target)
                 lbox += (1.0 - iou).mean()  # iou loss
@@ -501,7 +504,7 @@ class ComputeLoss:
                 tobj[b, a, gj, gi] = (1.0 - self.gr) + self.gr * iou.detach().clamp(0).type(tobj.dtype)  # iou ratio
 
                 # predicted distance
-                pdist = ps[:, -3].sigmoid()  # assuming the second last element is distance, TODO currently with sigmoid
+                pdist = ps_dis[:, -1].sigmoid()  # assuming the second last element is distance, TODO currently with sigmoid
                 # ldist += self.MSEdist(pdist, distance_targets[b, a, gj, gi])  # You need to ensure indices match here
                 # matched_distance_targets = distance_targets[b]  # This is likely incorrect; you need a correct method here
 
@@ -522,7 +525,7 @@ class ComputeLoss:
                 valid_heading_mask = heading_vec.norm(dim=1) > 1e-6
                 if valid_heading_mask.any():
                     # Predicted heading (cos/sin) from model output
-                    pheading = ps[valid_heading_mask, -2:]
+                    pheading = ps_head[valid_heading_mask, -2:]
                     theading = heading_vec[valid_heading_mask]
 
                     # TODO: which loss for heading?
@@ -531,10 +534,10 @@ class ComputeLoss:
 
                 # Classification
                 if self.nc > 1:  # cls loss (only if multiple classes)
-                    t = torch.full_like(ps[:, 5:-3], self.cn, device=device)  # targets
+                    t = torch.full_like(ps_det[:, 5:-3], self.cn, device=device)  # targets
                     t[range(n), tcls[i]] = self.cp
                     #t[t==self.cp] = iou.detach().clamp(0).type(t.dtype)
-                    lcls += self.BCEcls(ps[:, 5:-3], t)  # BCE
+                    lcls += self.BCEcls(ps_det[:, 5:-3], t)  # BCE
 
                 # Append targets to text file
                 # with open('targets.txt', 'a') as file:
@@ -559,7 +562,7 @@ class ComputeLoss:
         loss = lbox + lobj + lcls + ldist + lhead
         return loss * bs, torch.cat((lbox, lobj, lcls, ldist, lhead, loss)).detach()
 
-    def build_targets(self, p, targets):
+    def build_targets(self, p_det, targets):
         # Build targets for compute_loss(), input targets(image,class,x,y,w,h)
         na, nt = self.na, targets.shape[0]  # number of anchors, targets
         tcls, tbox, indices, anch = [], [], [], []
@@ -577,7 +580,7 @@ class ComputeLoss:
         sines=[]
         for i in range(self.nl):
             anchors = self.anchors[i]
-            gain[2:6] = torch.tensor(p[i].shape)[[3, 2, 3, 2]]  # xyxy gain
+            gain[2:6] = torch.tensor(p_det[i].shape)[[3, 2, 3, 2]]  # xyxy gain
 
             # Match targets to anchors
             t = targets * gain
@@ -1267,7 +1270,7 @@ class ComputeLossAuxOTA:
         for k in 'na', 'nc', 'nl', 'anchors', 'stride':
             setattr(self, k, getattr(det, k))
 
-    def __call__(self, p, targets, imgs):  # predictions, targets, model   
+    def __call__(self, targets, imgs):  # predictions, targets, model
         device = targets.device
         lcls, lbox, lobj = torch.zeros(1, device=device), torch.zeros(1, device=device), torch.zeros(1, device=device)
         bs_aux, as_aux_, gjs_aux, gis_aux, targets_aux, anchors_aux = self.build_targets2(p[:self.nl], targets, imgs)
