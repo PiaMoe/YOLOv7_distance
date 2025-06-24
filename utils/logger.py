@@ -11,7 +11,8 @@ import re
 
 def log_predictions(tensor, epoch, batch_i, output_dir, sample_prob=0.001, col_names=None):
     """
-    Logs predictions from the model (after flattening)
+    Logs predictions from the model (after flattening), appending values to one file per (epoch, batch),
+    adding missing columns as needed and aligning by row index.
 
     Args:
         tensor (torch.Tensor): Shape (bs, na, ny, nx, no)
@@ -19,46 +20,61 @@ def log_predictions(tensor, epoch, batch_i, output_dir, sample_prob=0.001, col_n
         batch_i (int): Batch index
         output_dir (str): Directory for CSV files
         sample_prob (float): Sampling probability (e.g., 0.01 = 1%)
-        col_names (list[str]): Optional, e.g., ["x", "y", "w", "h", "obj", "class_logits", "distance", "cosH", "sinH"]
+        col_names (list[str]): Names of the tensor's last-dim columns
     """
-
     os.makedirs(output_dir, exist_ok=True)
 
-    if epoch % 10 == 0 and batch_i % 4 == 0:
-        bs, na, ny, nx, no = tensor.shape
-        flat = tensor.view(bs * na * ny * nx, no)
+    if epoch % 10 != 0 or batch_i % 4 != 0:
+        return
 
-        mask = torch.rand(flat.shape[0]) < sample_prob
-        sampled = flat[mask]
+    bs, na, ny, nx, no = tensor.shape
+    flat = tensor.view(bs * na * ny * nx, no)
 
-        if sampled.numel() == 0:
-            return
+    mask = torch.rand(flat.shape[0]) < sample_prob
+    sampled = flat[mask]
 
-        np_data = sampled.detach().cpu().numpy()
-        fname = f"pred_epoch{epoch}_batch{batch_i}.csv"
-        fpath = os.path.join(output_dir, fname)
+    if sampled.numel() == 0:
+        return
 
-        if os.path.exists(fpath):
-            df_existing = pd.read_csv(fpath)
-            existing_cols = list(df_existing.columns)
-            if col_names:
-                missing_cols = [col for col in col_names if col not in existing_cols]
-                if missing_cols:
-                    # Add missing columns with NaN
-                    for col in missing_cols:
-                        df_existing[col] = float('nan')
-                    # Reorder columns to match col_names
-                    df_existing = df_existing.reindex(columns=col_names)
-            else:
-                col_names = existing_cols
-            # Append new data
-            df_new = pd.DataFrame(np_data, columns=col_names)
-            df_combined = pd.concat([df_existing, df_new], ignore_index=True)
-            df_combined.to_csv(fpath, index=False)
-        else:
-            header = ",".join(col_names) if col_names else None
-            np.savetxt(fpath, np_data, delimiter=",", header=header if header else "", comments="")
-        print(f"saved predictions to {fpath}")
+    np_data = sampled.detach().cpu().numpy()
+    df_new = pd.DataFrame(np_data, columns=col_names[:np_data.shape[1]])
+
+    # Ziel-Dateiname: EIN File pro epoch/batch
+    fname = f"pred_epoch{epoch}_batch{batch_i}.csv"
+    fpath = os.path.join(output_dir, fname)
+
+    if os.path.exists(fpath):
+        df_existing = pd.read_csv(fpath)
+
+        # Falls neue Spalten dazukommen: ergänzen
+        for col in df_new.columns:
+            if col not in df_existing.columns:
+                df_existing[col] = np.nan
+
+        for col in df_existing.columns:
+            if col not in df_new.columns:
+                df_new[col] = np.nan
+
+        # Reorder für gleiche Spaltenreihenfolge
+        df_new = df_new[df_existing.columns]
+
+        # Falls ungleich viele Zeilen: auffüllen mit NaN
+        if len(df_new) < len(df_existing):
+            padding = pd.DataFrame(np.nan, index=range(len(df_existing) - len(df_new)), columns=df_existing.columns)
+            df_new = pd.concat([df_new, padding], ignore_index=True)
+        elif len(df_new) > len(df_existing):
+            padding = pd.DataFrame(np.nan, index=range(len(df_new) - len(df_existing)), columns=df_existing.columns)
+            df_existing = pd.concat([df_existing, padding], ignore_index=True)
+
+        # Beide zusammenführen (Spalten aktualisieren)
+        df_combined = df_existing.combine_first(df_new)
+        df_combined.update(df_new)
+        df_combined.to_csv(fpath, index=False)
+    else:
+        df_new.to_csv(fpath, index=False)
+
+    print(f"[log_predictions] Updated predictions in {fpath}")
+
 
 def safe_read_csv(file):
     rows = []

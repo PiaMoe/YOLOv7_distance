@@ -187,23 +187,26 @@ def test(data,
                 # heading normalization in loss function
 
                 # compute val losses
-                pred_det = [x.float for x in detect_out]
-                pred_dis = [x.float for x in distance_out]
-                pred_head = [x.float for x in heading_out]
+                pred_det = [x.float() for x in detect_train_out]
+                pred_dis = [x.float() for x in distance_train_out]
+                pred_head = [x.float() for x in heading_train_out]
                 L = compute_loss(pred_det, pred_dis, pred_head, loss_targets)[1][:5]  # box, obj, cls, dist, heading
                 L = torch.round(L * 1e4) / 1e4
                 loss += L
+
+            # combine outputs
+            out = torch.cat([detect_out, distance_out, heading_out], dim=-1)
 
             # Run NMS
             targets[:, 2:-3] *= torch.Tensor([width, height, width, height]).to(device)  # to pixels
             lb = [targets[targets[:, 0] == i, 1:] for i in range(nb)] if save_hybrid else []  # for autolabelling
             t = time_synchronized()
-            detect_out = non_max_suppression(detect_out, conf_thres=conf_thres, iou_thres=iou_thres, labels=lb, multi_label=True)
+            out = non_max_suppression(out, conf_thres=conf_thres, iou_thres=iou_thres, labels=lb, multi_label=True)
             t1 += time_synchronized() - t
 
         # Statistics per image
 
-        for si, det_pred in enumerate(detect_out):
+        for si, pred in enumerate(out):
             labels = targets[targets[:, 0] == si, 1:]
             nl = len(labels)
             tcls = labels[:, 0].tolist() if nl else []  # target class
@@ -213,7 +216,7 @@ def test(data,
             path = Path(paths[si])
             seen += 1
 
-            if len(det_pred) == 0:
+            if len(pred) == 0:
                 if nl:
                     # Append statistics (correct, conf, pcls, tcls, pdist, tdist, pcosh, tcosh, psinh, tsinh)
                     stats.append((torch.zeros(0, niou, dtype=torch.bool), torch.Tensor(), torch.Tensor(),
@@ -221,10 +224,8 @@ def test(data,
                 continue
 
             # Predictions
-            det_predn = det_pred.clone()
-            dist_predn = distance_out[si]
-            head_predn = heading_out[si]
-            scale_coords(img[si].shape[1:], det_predn[:, :6], shapes[si][0], shapes[si][1])  # native-space pred
+            predn = pred.clone()
+            scale_coords(img[si].shape[1:], predn[:, :6], shapes[si][0], shapes[si][1])  # native-space pred
 
             # Append to text file
             if save_txt:
