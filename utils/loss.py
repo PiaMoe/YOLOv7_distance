@@ -512,6 +512,9 @@ class ComputeLoss:
                 valid_dist_mask = distance != -1    # filter out missing ground truth values
                 if valid_dist_mask.any():
                     ldist += self.L1dist(pdist[valid_dist_mask], distance[valid_dist_mask])
+                else:
+                    print("dummy distance loss computed")
+                    ldist += (pdist.sum() * 0.0)  # dummy gradient flow
 
                 # Calculate MSE loss for distances
                 # ldist += self.MSEdist(pdist, distance)
@@ -531,6 +534,9 @@ class ComputeLoss:
                     # TODO: which loss for heading?
                     ang_error = sin_cos_angular_error(pheading, theading)
                     lhead += ang_error
+                else:
+                    print("dummy distance loss computed")
+                    lhead += (ps_head[:, -2:].sum() * 0.0) # dummy gradient flow
 
                 # Classification
                 if self.nc > 1:  # cls loss (only if multiple classes)

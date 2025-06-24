@@ -279,9 +279,9 @@ def train(hyp, opt, device, tb_writer=None):
 
     # DDP mode
     if cuda and rank != -1:
-        model = DDP(model, device_ids=[opt.local_rank], output_device=opt.local_rank,
+        model = DDP(model, device_ids=[opt.local_rank], output_device=opt.local_rank, find_unused_parameters=True)
                     # nn.MultiheadAttention incompatibility with DDP https://github.com/pytorch/pytorch/issues/26698
-                    find_unused_parameters=any(isinstance(layer, nn.MultiheadAttention) for layer in model.modules()))
+                    #find_unused_parameters=any(isinstance(layer, nn.MultiheadAttention) for layer in model.modules()))
 
     # Model parameters
     hyp['box'] *= 3. / nl  # scale to layers
@@ -369,10 +369,10 @@ def train(hyp, opt, device, tb_writer=None):
             # Forward
             with amp.autocast(enabled=cuda):
                 pred_det, pred_dis, pred_head = model(imgs, epoch=epoch, batch_i=i)  # forward
-                if 'loss_ota' not in hyp or hyp['loss_ota'] == 1:
-                    loss, loss_items = compute_loss_ota(pred_det, targets.to(device))  # loss scaled by batch_size
-                else:
-                    loss, loss_items = compute_loss(pred_det, pred_dis, pred_head, targets.to(device))  # loss scaled by batch_size
+                #if 'loss_ota' not in hyp or hyp['loss_ota'] == 1:
+                #    loss, loss_items = compute_loss_ota(pred_det, targets.to(device))  # loss scaled by batch_size
+                #else:
+                loss, loss_items = compute_loss(pred_det, pred_dis, pred_head, targets.to(device))  # loss scaled by batch_size
                 if rank != -1:
                     loss *= opt.world_size  # gradient averaged between devices in DDP mode
                 if opt.quad:
@@ -380,6 +380,13 @@ def train(hyp, opt, device, tb_writer=None):
 
             # Backward
             scaler.scale(loss).backward()
+            
+            for name, param in model.named_parameters():
+                if param.grad is None:
+                    print(f"⚠️  No gradient for: {name}")
+                #else:
+                    #print(f" Gradient for: {name}")
+                
 
             # Optimize
             if ni % accumulate == 0:

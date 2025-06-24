@@ -51,18 +51,21 @@ class IDistance(nn.Module):
             self.register_buffer('anchors', a)  # shape(nl,na,2)
             self.register_buffer('anchor_grid', a.clone().view(self.nl, 1, -1, 1, 1, 2))  # shape(nl,1,na,1,1,2)
             self.m = nn.ModuleList(nn.Conv2d(x, self.na * 1, 1) for x in ch)  # 1 = distance
+            self.ia = nn.ModuleList(ImplicitA(x) for x in ch)
+            self.im = nn.ModuleList(ImplicitM(self.no * self.na) for _ in ch)
 
         def forward(self, x, epoch=1, batch_i=1):
             self.epoch = epoch
             self.batch_i = batch_i
             z = []
             for i in range(self.nl):
-                x[i] = self.m[i](x[i])
+                x[i] = self.m[i](self.ia[i](x[i]))
+                x[i] = self.im[i](x[i])
                 bs, _, ny, nx = x[i].shape
                 x[i] = x[i].view(bs, self.na, 1, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
                 # TODO: logging
                 # log model outputs
-                raw = x[i].detach().cpu()  # shape: (bs, na, ny, nx, no)
+                #raw = x[i].detach().cpu()  # shape: (bs, na, ny, nx, no)
                 #if is_main_process():
                 #    log_predictions(raw, self.epoch, self.batch_i, output_dir="preds/", sample_prob=0.01,
                 #                col_names=["distance"])
@@ -72,7 +75,6 @@ class IDistance(nn.Module):
                     y = x[i].sigmoid()
                     y[..., -1] = self.rescale_dist(y[..., -1])  # rescale dist based on norm strategy
                     z.append(y.view(bs, -1, 1))
-
             # returns if training: List of 3 tensors, shape: [batch_size, num_anchors, height, width, 1]
             # if inference: z of shape [B, A * H * W, 1]
             return x if self.training else (torch.cat(z, 1), x)
@@ -109,22 +111,26 @@ class IHeading(nn.Module):
         self.nl = len(anchors)
         self.na = len(anchors[0]) // 2
         self.grid = [torch.zeros(1)] * self.nl
+        self.no = 2 # 2 outputs (heading)
         a = torch.tensor(anchors).float().view(self.nl, -1, 2)
         self.register_buffer('anchors', a)  # shape(nl,na,2)
         self.register_buffer('anchor_grid', a.clone().view(self.nl, 1, -1, 1, 1, 2))  # shape(nl,1,na,1,1,2)
         self.m = nn.ModuleList(nn.Conv2d(x, self.na * 2, 1) for x in ch)  # 2 = sin, cos
+        self.ia = nn.ModuleList(ImplicitA(x) for x in ch)
+        self.im = nn.ModuleList(ImplicitM(self.no * self.na) for _ in ch)
 
     def forward(self, x, epoch=1, batch_i=1):
         self.epoch = epoch
         self.batch_i = batch_i
-        z = []
+        z = []                   
         for i in range(self.nl):
-            x[i] = self.m[i](x[i])
+            x[i] = self.m[i](self.ia[i](x[i]))
+            x[i] = self.im[i](x[i])
             bs, _, ny, nx = x[i].shape
             x[i] = x[i].view(bs, self.na, 2, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
             # TODO: logging
             # log model outputs
-            raw = x[i].detach().cpu()  # shape: (bs, na, ny, nx, no)
+            #raw = x[i].detach().cpu()  # shape: (bs, na, ny, nx, no)
             #if is_main_process():
             #    log_predictions(raw, self.epoch, self.batch_i, output_dir="preds/", sample_prob=0.01,
             #                col_names=["sinH", "cosH"])
@@ -274,7 +280,7 @@ class IDetect(nn.Module):
             bs, _, ny, nx = x[i].shape  # x(bs,255,20,20) to x(bs,3,20,20,85)
             x[i] = x[i].view(bs, self.na, self.no, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
             # log model outputs
-            raw = x[i].detach().cpu()  # shape: (bs, na, ny, nx, no)
+            #raw = x[i].detach().cpu()  # shape: (bs, na, ny, nx, no)
             #if is_main_process():
             #    log_predictions(raw, self.epoch, self.batch_i, output_dir="preds/", sample_prob=0.01,
             #                col_names=["x", "y", "w", "h", "obj", "class_0"])
@@ -778,7 +784,6 @@ class Model(nn.Module):
 
             if isinstance(m, IDetect):
                 detect_out = m(x, epoch=epoch, batch_i=batch_i)  # Liste von Tensors
-                x = detect_out  # x für nächsten Layer setzen, falls nötig
             elif isinstance(m, IDistance):
                 distance_out = m(x, epoch=epoch, batch_i=batch_i)  # Liste von Tensors oder Tensor
             elif isinstance(m, IHeading):
