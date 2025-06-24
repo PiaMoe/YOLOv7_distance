@@ -281,7 +281,6 @@ class IDetect(nn.Module):
                 y[..., 0:2] = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy
                 y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
                 z.append(y.view(bs, -1, self.no))
-        # output = ???
         return x if self.training else (torch.cat(z, 1), x)
 
     def fuseforward(self, x, epoch=1, batch_i=1):
@@ -677,7 +676,7 @@ class Model(nn.Module):
         # print([x.shape for x in self.forward(torch.zeros(1, ch, 64, 64))])
 
         # Build strides, anchors
-        m = self.model[-1] # Detect()
+        m = self.model[-3] # Detect()
         if isinstance(m, Detect):
             s = 256  # 2x min stride
             m.stride = torch.tensor([s / x.shape[-2] for x in self.forward(torch.zeros(1, ch, s, s))])  # forward
@@ -688,7 +687,7 @@ class Model(nn.Module):
             # print('Strides: %s' % m.stride.tolist())
         if isinstance(m, (IDetect, IDistance, IHeading)):
             s = 256  # 2x min stride
-            m.stride = torch.tensor([s / x.shape[-2] for x in self.forward(torch.zeros(1, ch, s, s))])  # forward
+            m.stride = torch.tensor([s / x.shape[-2] for [x, x_1, x_2] in self.forward(torch.zeros(1, ch, s, s))]) # forward
             check_anchor_order(m)
             m.anchors /= m.stride.view(-1, 1, 1)
             self.stride = m.stride
@@ -786,28 +785,13 @@ class Model(nn.Module):
         if profile:
             print('%.1fms total' % sum(dt))
 
-        def flatten_output(outputs):
-            if isinstance(outputs, list):
-                return torch.cat([o.view(o.size(0), -1, o.size(-1)) for o in outputs], dim=1)
-            return outputs
-        detect_out = flatten_output(detect_out)
-        distance_out = flatten_output(distance_out)
-        heading_out = flatten_output(heading_out)
+        return detect_out, distance_out, heading_out  # outputs
 
-        # Logging
-        print("detect_out shape: " + str(detect_out.shape))
-        print("distance_out shape: " + str(distance_out.shape))
-        print("heading_out shape: " + str(heading_out.shape))
-
-        # Concatenate
-        output = torch.cat([detect_out, distance_out, heading_out], dim=-1)
-        print("output shape: " + str(output.shape))
-        return output
 
     def _initialize_biases(self, cf=None):  # initialize biases into Detect(), cf is class frequency
         # https://arxiv.org/abs/1708.02002 section 3.3
         # cf = torch.bincount(torch.tensor(np.concatenate(dataset.labels, 0)[:, 0]).long(), minlength=nc) + 1.
-        m = self.model[-1]  # Detect() module
+        m = self.model[-3]  # Detect() module
         for mi, s in zip(m.m, m.stride):  # from
             b = mi.bias.view(m.na, -1)  # conv.bias(255) to (3,85)
             b.data[:, 4] += math.log(8 / (640 / s) ** 2)  # obj (8 objects per 640 image)

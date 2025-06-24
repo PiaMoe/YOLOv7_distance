@@ -153,8 +153,8 @@ def test(data,
         with torch.no_grad():
             # Run model
             t = time_synchronized()
-            out, train_out = model(img, augment=augment)  # inference and training outputs
-            detect_out, distance_out, heading_out = train_out
+            detect_out, distance_out, heading_out = model(img, augment=augment)  # inference and training outputs
+            detect_out, train_out = detect_out
             t0 += time_synchronized() - t
 
             # Compute loss
@@ -196,12 +196,12 @@ def test(data,
             targets[:, 2:-3] *= torch.Tensor([width, height, width, height]).to(device)  # to pixels
             lb = [targets[targets[:, 0] == i, 1:] for i in range(nb)] if save_hybrid else []  # for autolabelling
             t = time_synchronized()
-            out = non_max_suppression(out, conf_thres=conf_thres, iou_thres=iou_thres, labels=lb, multi_label=True)
+            detect_out = non_max_suppression(detect_out, conf_thres=conf_thres, iou_thres=iou_thres, labels=lb, multi_label=True)
             t1 += time_synchronized() - t
 
         # Statistics per image
 
-        for si, pred in enumerate(out):
+        for si, pred in enumerate(detect_out):
             labels = targets[targets[:, 0] == si, 1:]
             nl = len(labels)
             tcls = labels[:, 0].tolist() if nl else []  # target class
