@@ -14,12 +14,15 @@ from utils.torch_utils import time_synchronized, fuse_conv_and_bn, model_info, s
     select_device, copy_attr
 from utils.loss import SigmoidBin
 from utils.logger import log_predictions
+import torch.distributed as dist
 
 try:
     import thop  # for FLOPS computation
 except ImportError:
     thop = None
 
+def is_main_process():
+    return not dist.is_available() or not dist.is_initialized() or dist.get_rank() == 0
 
 #TODO: Distance and Heading modules
 class IDistance(nn.Module):
@@ -60,7 +63,8 @@ class IDistance(nn.Module):
                 # TODO: logging
                 # log model outputs
                 raw = x[i].detach().cpu()  # shape: (bs, na, ny, nx, no)
-                log_predictions(raw, self.epoch, self.batch_i, output_dir="preds/", sample_prob=0.01,
+                if is_main_process():
+                    log_predictions(raw, self.epoch, self.batch_i, output_dir="preds/", sample_prob=0.01,
                                 col_names=["distance"])
                 if not self.training:
                     if self.grid[i].shape[2:4] != x[i].shape[2:4]:
@@ -121,7 +125,8 @@ class IHeading(nn.Module):
             # TODO: logging
             # log model outputs
             raw = x[i].detach().cpu()  # shape: (bs, na, ny, nx, no)
-            log_predictions(raw, self.epoch, self.batch_i, output_dir="preds/", sample_prob=0.01,
+            if is_main_process():
+                log_predictions(raw, self.epoch, self.batch_i, output_dir="preds/", sample_prob=0.01,
                             col_names=["sinH", "cosH"])
             if not self.training:
                 if self.grid[i].shape[2:4] != x[i].shape[2:4]:
@@ -270,7 +275,8 @@ class IDetect(nn.Module):
             x[i] = x[i].view(bs, self.na, self.no, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
             # log model outputs
             raw = x[i].detach().cpu()  # shape: (bs, na, ny, nx, no)
-            log_predictions(raw, self.epoch, self.batch_i, output_dir="preds/", sample_prob=0.01,
+            if is_main_process():
+                log_predictions(raw, self.epoch, self.batch_i, output_dir="preds/", sample_prob=0.01,
                             col_names=["x", "y", "w", "h", "obj", "class_0"])
 
             if not self.training:  # inference
