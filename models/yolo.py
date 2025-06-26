@@ -130,7 +130,7 @@ class IHeading(nn.Module):
             x[i] = x[i].view(bs, self.na, 2, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
             # TODO: logging
             # log model outputs
-            #raw = x[i].detach().cpu()  # shape: (bs, na, ny, nx, no)
+            raw = x[i].detach().cpu()  # shape: (bs, na, ny, nx, no)
             if is_main_process():
                 log_predictions(raw, self.epoch, self.batch_i, output_dir="preds/", sample_prob=0.01,
                             col_names=["sinH", "cosH"])

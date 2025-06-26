@@ -469,8 +469,7 @@ class ComputeLoss:
         self.ssi = list(det.stride).index(16) if autobalance else 0  # stride 16 index
         self.BCEcls, self.BCEobj, self.gr, self.hyp, self.autobalance = BCEcls, BCEobj, model.gr, h, autobalance
         for k in 'na', 'nc', 'nl', 'anchors':
-            if hasattr(det, k): # check if attribute exists (dist and head have no nc attribute)
-                setattr(self, k, getattr(det, k))
+            setattr(self, k, getattr(det, k))
 
     def __call__(self, p_det, p_dis, p_head, targets):  # predictions, targets, model
         device = targets.device
@@ -534,7 +533,7 @@ class ComputeLoss:
                     ang_error = sin_cos_angular_error(pheading, theading)
                     lhead += ang_error
                 else:
-                    print("dummy distance loss computed")
+                    print("dummy heading loss computed")
                     lhead += (ps_head[:, -2:].sum() * 0.0) # dummy gradient flow
 
                 # Classification
