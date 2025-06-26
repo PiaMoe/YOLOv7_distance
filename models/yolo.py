@@ -65,10 +65,10 @@ class IDistance(nn.Module):
                 x[i] = x[i].view(bs, self.na, 1, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
                 # TODO: logging
                 # log model outputs
-                #raw = x[i].detach().cpu()  # shape: (bs, na, ny, nx, no)
-                #if is_main_process():
-                #    log_predictions(raw, self.epoch, self.batch_i, output_dir="preds/", sample_prob=0.01,
-                #                col_names=["distance"])
+                raw = x[i].detach().cpu()  # shape: (bs, na, ny, nx, no)
+                if is_main_process():
+                    log_predictions(raw, self.epoch, self.batch_i, output_dir="preds/", sample_prob=0.01,
+                                col_names=["distance"])
                 if not self.training:
                     if self.grid[i].shape[2:4] != x[i].shape[2:4]:
                         self.grid[i] = self._make_grid(nx, ny).to(x[i].device)
@@ -131,9 +131,9 @@ class IHeading(nn.Module):
             # TODO: logging
             # log model outputs
             #raw = x[i].detach().cpu()  # shape: (bs, na, ny, nx, no)
-            #if is_main_process():
-            #    log_predictions(raw, self.epoch, self.batch_i, output_dir="preds/", sample_prob=0.01,
-            #                col_names=["sinH", "cosH"])
+            if is_main_process():
+                log_predictions(raw, self.epoch, self.batch_i, output_dir="preds/", sample_prob=0.01,
+                            col_names=["sinH", "cosH"])
             if not self.training:
                 if self.grid[i].shape[2:4] != x[i].shape[2:4]:
                     self.grid[i] = self._make_grid(nx, ny).to(x[i].device)
@@ -280,10 +280,10 @@ class IDetect(nn.Module):
             bs, _, ny, nx = x[i].shape  # x(bs,255,20,20) to x(bs,3,20,20,85)
             x[i] = x[i].view(bs, self.na, self.no, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
             # log model outputs
-            #raw = x[i].detach().cpu()  # shape: (bs, na, ny, nx, no)
-            #if is_main_process():
-            #    log_predictions(raw, self.epoch, self.batch_i, output_dir="preds/", sample_prob=0.01,
-            #                col_names=["x", "y", "w", "h", "obj", "class_0"])
+            raw = x[i].detach().cpu()  # shape: (bs, na, ny, nx, no)
+            if is_main_process():
+                log_predictions(raw, self.epoch, self.batch_i, output_dir="preds/", sample_prob=0.01,
+                            col_names=["x", "y", "w", "h", "obj", "class_0"])
 
             if not self.training:  # inference
                 if self.grid[i].shape[2:4] != x[i].shape[2:4]:
