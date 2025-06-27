@@ -1,5 +1,6 @@
 import torch.nn as nn
 import torch
+from torchvision.models import resnet18, mobilenet_v2
 
 class CropRegressor(nn.Module):
     def __init__(self):
@@ -24,4 +25,36 @@ class CropRegressor(nn.Module):
         x = self.fc(x)
         # Distance sigmoid, heading bleibt unverändert
         x[:, 0] = self.sigmoid(x[:, 0])
+        return x
+
+class ResNetCustomOutput(nn.Module):
+    def __init__(self):
+        super().__init__()
+        base_model = resnet18(pretrained=True)
+        self.backbone = nn.Sequential(*list(base_model.children())[:-1])  # ohne fc
+        self.fc = nn.Linear(base_model.fc.in_features, 3)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        x = self.backbone(x)
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+        x[:, 0] = self.sigmoid(x[:, 0])  # Distance sigmoid, heading bleibt unverändert
+        return x
+
+class MobileNetV2CustomOutput(nn.Module):
+    def __init__(self):
+        super().__init__()
+        base_model = mobilenet_v2(pretrained=True)
+        self.backbone = base_model.features  # feature extractor
+        self.pool = nn.AdaptiveAvgPool2d(1)  # global average pooling
+        self.fc = nn.Linear(base_model.last_channel, 3)  # output 3 values
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        x = self.backbone(x)
+        x = self.pool(x)
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+        x[:, 0] = self.sigmoid(x[:, 0])  # apply sigmoid to the first output (e.g. distance)
         return x

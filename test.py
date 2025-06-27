@@ -17,7 +17,7 @@ from utils.general import coco80_to_coco91_class, check_dataset, check_file, che
 from utils.metrics import ap_per_class, ConfusionMatrix
 from utils.plots import plot_images, output_to_target, plot_study_txt, plot_dist_err, plot_errors, plot_dist_pred, plot_heading_pred, plot_heading_err
 from utils.torch_utils import select_device, time_synchronized, TracedModel
-from secondStageModel.crop_regressor import CropRegressor
+from secondStageModel.crop_regressor import CropRegressor, ResNetCustomOutput
 import torchvision.transforms.functional as TF
 
 def create_distance_bins(max_distance, number_bins):
@@ -94,7 +94,7 @@ def test(data,
             model = TracedModel(model, device, imgsz)
 
         # Second-stage regressor (distance & heading)
-        modelDH = CropRegressor()
+        modelDH = ResNetCustomOutput()
         modelDH.load_state_dict(torch.load(weights_reg[0], map_location=device))
         modelDH = modelDH.to(device)
 
@@ -557,7 +557,7 @@ def test(data,
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='test.py')
     parser.add_argument('--weightsYOLO', nargs='+', type=str, default='../runs/train/BOArDING_Det/weights/best.pt', help='model.pt path(s)')
-    parser.add_argument('--weightsRegressor', nargs='+', type=str, default= ['secondStageModel/experiment_1/best.pth'], help='model.pt path(s)')
+    parser.add_argument('--weightsRegressor', nargs='+', type=str, default= ['secondStageModel/outputs/ResNet18/best.pth'], help='model.pt path(s)')
     parser.add_argument('--data', type=str, default='data/BOArDING.yaml', help='*.data path')
     parser.add_argument('--batch-size', type=int, default=4, help='size of each image batch')
     parser.add_argument('--img-size', type=int, default=1024, help='inference size (pixels)')

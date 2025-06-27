@@ -3,12 +3,13 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 import torch.optim as optim
 from secondStageModel.crop_dataloader import ObjectCropDataset
-from secondStageModel.crop_regressor import CropRegressor
+from secondStageModel.crop_regressor import CropRegressor, ResNetCustomOutput, MobileNetV2CustomOutput
 import torchvision.utils as vutils
 import os
 import torchvision.transforms.functional as TF
 import wandb
 import numpy as np
+
 
 def custom_loss(outputs, targets):
     # outputs: [batch, 3] -> [distance_norm, cos, sin]
@@ -81,23 +82,26 @@ def evaluate(model, val_loader, device):
         mean_abs_distance_error_bins
     )
 
-def train(train_dataset, val_dataset, epochs=20):
+def train(train_dataset, val_dataset, epochs=20, name="custom_model"):
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=32, shuffle=True)
 
-    model = CropRegressor()
+    #model = CropRegressor()
+    model = MobileNetV2CustomOutput()
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
     best_val_loss = float('inf')
-    best_model_path = "experiment_1/best.pth"
+    best_model_path = f"outputs/{name}/best.pth"
+    os.makedirs(os.path.dirname(best_model_path), exist_ok=True)
 
     crops_saved = 0
     max_crops_to_save = 0
 
-    wandb.init(project="crop_regression", name="experiment_1")
+    wandb.init(project="crop_regression", name=name)
     wandb.watch(model)
 
     for epoch in range(epochs):
@@ -153,7 +157,7 @@ def train(train_dataset, val_dataset, epochs=20):
          epoch_val_angle_error, epoch_val_abs_distance_error, epoch_val_abs_distance_error_bins) = evaluate(model, val_loader, device)
 
         print(
-            f"Epoch {epoch+1}, Train Loss: {epoch_train_loss:.4f}, "
+            f"\nEpoch {epoch+1}\nTrain Loss: {epoch_train_loss:.4f}, "
             f"\nVal Loss: {epoch_val_loss:.4f}, "
             f"\nTrain Distance Loss: {epoch_train_distance_loss:.4f}, "
             f"\nVal Distance Loss: {epoch_val_distance_loss:.4f}, "
@@ -218,4 +222,4 @@ if __name__ == '__main__':
     print(crop.shape)  # (3, 64, 64)
     print(target)  # Tensor with [distance, cos, sin]
 
-    train(dataset_train, dataset_val, 100)
+    train(dataset_train, dataset_val, 100, name="MobileNetV2")
