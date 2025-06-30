@@ -562,9 +562,24 @@ class ComputeLoss:
         lhead *= self.hyp['heading']
 
         bs = tobj.shape[0]  # batch size
-
         loss = lbox + lobj + lcls + ldist + lhead
-        return loss * bs, torch.cat((lbox, lobj, lcls, ldist, lhead, loss)).detach()
+        
+        def safe_tensor(x, device):
+            if isinstance(x, torch.Tensor):
+                return x.view(1).to(device)
+            else:
+                return torch.tensor([x], device=device, dtype=torch.float32)
+        
+        loss_items = torch.cat([
+            safe_tensor(lbox, loss.device),
+            safe_tensor(lobj, loss.device),
+            safe_tensor(lcls, loss.device),
+            safe_tensor(ldist, loss.device),
+            safe_tensor(lhead, loss.device),
+            safe_tensor(loss, loss.device)
+        ]).detach()
+
+        return loss * bs, loss_items 
 
     def build_targets(self, p_det, targets):
         # Build targets for compute_loss(), input targets(image,class,x,y,w,h)
