@@ -784,10 +784,13 @@ class Model(nn.Module):
 
             if isinstance(m, IDetect):
                 detect_out = m(x, epoch=epoch, batch_i=batch_i)  # Liste von Tensors
+                x = detect_out
             elif isinstance(m, IDistance):
                 distance_out = m(x, epoch=epoch, batch_i=batch_i)  # Liste von Tensors oder Tensor
+                x = detect_out
             elif isinstance(m, IHeading):
                 heading_out = m(x, epoch=epoch, batch_i=batch_i)  # Liste von Tensors oder Tensor
+                x =heading_out
             else:
                 x = m(x)
 

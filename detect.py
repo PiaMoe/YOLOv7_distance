@@ -88,14 +88,22 @@ def detect(save_img=False):
             old_img_b = img.shape[0]
             old_img_h = img.shape[2]
             old_img_w = img.shape[3]
-            for i in range(3):
-                model(img, augment=opt.augment)[0]
+            for _ in range(3):
+                _ = model(img, augment=opt.augment)
+
 
         # Inference
         t1 = time_synchronized()
         with torch.no_grad():   # Calculating gradients would cause a GPU memory leak
-            pred = model(img, augment=opt.augment)[0]
+
+            detect_out, distance_out, heading_out = model(img, augment=opt.augment)
+            detect_pred = detect_out[0]
+            distance_pred = distance_out[0]
+            heading_pred = heading_out[0]
         t2 = time_synchronized()
+
+        # combine outputs
+        pred = torch.cat([detect_pred, distance_pred, heading_pred], dim=-1)
 
         # Apply NMS
         pred = non_max_suppression(pred, opt.conf_thres, opt.iou_thres, classes=opt.classes, agnostic=opt.agnostic_nms)
@@ -185,10 +193,10 @@ def detect(save_img=False):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', nargs='+', type=str, default='yolov7.pt', help='model.pt path(s)')
-    parser.add_argument('--source', type=str, default='inference/images', help='source')  # file/folder, 0 for webcam
-    parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
-    parser.add_argument('--conf-thres', type=float, default=0.05, help='object confidence threshold')
+    parser.add_argument('--weights', nargs='+', type=str, default='../runs/train/BOArDING_multHead/weights/best.pt', help='model.pt path(s)')
+    parser.add_argument('--source', type=str, default='../../../data/BOArDING_Dataset/BOArDING_cos_sin/val/images/', help='source')  # file/folder, 0 for webcam
+    parser.add_argument('--img-size', type=int, default=1024, help='inference size (pixels)')
+    parser.add_argument('--conf-thres', type=float, default=0.25, help='object confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='IOU threshold for NMS')
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--view-img', action='store_true', help='display results')

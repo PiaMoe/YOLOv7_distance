@@ -1,7 +1,0 @@
-#yaml file for YOLOv7
-train: /data/pmoessner/BOArDING_Dataset_cos_sin/train/images
-test: /data/pmoessner/BOArDING_Dataset_cos_sin/test/images
-val: /data/pmoessner/BOArDING_Dataset_cos_sin/val/images
-
-nc: 1
-names: ['boat']

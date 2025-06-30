@@ -160,14 +160,19 @@ def detect(save_img=False):
             old_img_h = img.shape[2]
             old_img_w = img.shape[3]
             for i in range(3):
-                model(img, augment=opt.augment)[0]
+                model(img, augment=opt.augment)
 
         # Inference
         t1 = time_synchronized()
         with torch.no_grad():   # Calculating gradients would cause a GPU memory leak
-            pred = model(img, augment=opt.augment)[0]
+            detect_out, distance_out, heading_out = model(img, augment=opt.augment)
+            detect_pred = detect_out[0]
+            distance_pred = distance_out[0]
+            heading_pred = heading_out[0]
         t2 = time_synchronized()
 
+        # combine outputs
+        pred = torch.cat([detect_pred, distance_pred, heading_pred], dim=-1)
         # Apply NMS
         pred = non_max_suppression(pred, opt.conf_thres, opt.iou_thres, classes=opt.classes, agnostic=opt.agnostic_nms)
         t3 = time_synchronized()
