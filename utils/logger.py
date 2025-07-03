@@ -55,7 +55,7 @@ def safe_read_csv(file):
             # Spalten durch Trennzeichen erkennen
             sep = "\t" if "\t" in line else ","
             parts = line.strip().split(sep)
-            if len(parts) == 8:
+            if len(parts) == 7:
                 try:
                     if float(parts[0]) < 200:
                         rows.append([float(x) for x in parts])
@@ -113,5 +113,5 @@ def evaluate_logs(csv_dir):
 
 if __name__ == "__main__":
 
-    csv_dir = "../../runs/train/BOArDING_log/preds"
+    csv_dir = "../../runs/train/BOArDING_DetDis_anchors/preds/"
     evaluate_logs(csv_dir)
