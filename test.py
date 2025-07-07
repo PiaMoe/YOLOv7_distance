@@ -247,7 +247,7 @@ def test(data,
                 else:
                     print(f"[WARN] Skipped predn row (len={len(row)}): {row}")
                     continue
-
+                gn = torch.tensor(shapes[si][0])[[1, 0, 1, 0]]  # normalization gain whwh
                 xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()
                 if save_conf:
                     line = (cls, *xywh, conf, dist)
