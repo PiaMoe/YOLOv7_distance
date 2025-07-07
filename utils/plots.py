@@ -607,8 +607,22 @@ def plot_dist_pred(data, path):
     ax.set_ylabel("Prediction [m]")
     ax.set_xlabel("Ground Truth Distance [m]")
     plt.savefig(path)
-    
-# TODO: plot heading error
+
+def plot_dist_err_per_class(data, path):
+    class_ids = sorted(data.keys())
+    errors = [data[cid] for cid in class_ids]
+
+    plt.figure(figsize=(6, 4))
+    plt.bar(class_ids, errors, color='skyblue')
+    plt.xlabel("Klasse")
+    plt.ylabel("Mittlerer Distanzfehler (Meter)")
+    plt.title("Absoluter Distanzfehler pro Klasse")
+    plt.xticks(class_ids)  # Setze die Klassen-ID als X-Achsen-Ticks
+    plt.grid(axis='y', linestyle='--', alpha=0.7)
+    plt.tight_layout()
+    plt.savefig(path)
+
+
 def plot_heading_pred(data, path):
     fig, ax = plt.subplots()
     for x in data:

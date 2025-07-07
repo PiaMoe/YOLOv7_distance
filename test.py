@@ -17,7 +17,7 @@ from utils.datasets import create_dataloader
 from utils.general import coco80_to_coco91_class, check_dataset, check_file, check_img_size, check_requirements, \
     box_iou, non_max_suppression, scale_coords, xyxy2xywh, xywh2xyxy, set_logging, increment_path, colorstr
 from utils.metrics import ap_per_class, ConfusionMatrix
-from utils.plots import plot_images, output_to_target, plot_study_txt, plot_dist_err, plot_errors, plot_dist_pred, plot_heading_pred, plot_heading_err
+from utils.plots import plot_images, output_to_target, plot_study_txt, plot_dist_err, plot_errors, plot_dist_pred, plot_dist_err_per_class, plot_heading_pred, plot_heading_err
 from utils.torch_utils import select_device, time_synchronized, TracedModel
 
 
@@ -47,6 +47,25 @@ def compressBins(error_dict, sample_dict, num_new_bins = 5):
 
     # compute average error 
     return {(k-delta, k+delta): {'err': v['err']/(v['n']+0.0001), 'n': v['n']} for k,v in compressedBins.items()}
+
+def evaluate_distance_per_class(distance_errors):
+    abs_err_per_class = defaultdict(float)
+    count_per_class = defaultdict(int)
+
+    for entry in distance_errors:
+        for cls_id, obj_dist_pairs in entry.items():
+            for _, derror, gt, pred in obj_dist_pairs:
+                abs_err_per_class[cls_id] += derror
+                count_per_class[cls_id] += 1
+
+    mean_abs_err_per_class = {}
+    for cls_id in abs_err_per_class:
+        if count_per_class[cls_id] > 0:
+            mean_abs_err_per_class[cls_id] = abs_err_per_class[cls_id] / count_per_class[cls_id]
+        else:
+            mean_abs_err_per_class[cls_id] = None  # oder 0
+
+    return mean_abs_err_per_class
 
 
 def test(data,
@@ -317,7 +336,6 @@ def test(data,
 
                                 target_head = torch.rad2deg(torch.arctan2(target_sinh, target_cosh)) % 360
                                 pred_head = torch.rad2deg(torch.arctan2(pred_sinh, pred_cosh)) % 360
-
                                 # calculate heading error
                                 target_head = float(target_head.cpu())
                                 pred_head = float(pred_head.cpu())
@@ -391,6 +409,9 @@ def test(data,
                         samples_per_bin[bin_key] +=1
                         break
 
+    # same error per class
+    dist_class_errs = evaluate_distance_per_class(distance_errors)
+
     # compress bins for console logging
     if mean_dist_err_boat_bins:
         mean_abs_dist_err_boat_comp = compressBins(abs_dist_err_boat_bins, samples_per_bin)
@@ -456,6 +477,9 @@ def test(data,
     print("\nTotal Samples: ", samples)
     print("Overall weighted_rel_dist_err_boat =", overall_weighted_mean_dist_err_boat)
     print("Overall abs_mean_dist_err_boat =", mean_abs_dist_err_boat)
+    print("Absolute Distance Error per Class:")
+    for cls_id in sorted(dist_class_errs.keys()):
+        print(f"  Class {cls_id}: {dist_class_errs[cls_id]:.3f} m")
     print(f"\nMean heading error = {mean_heading_error:.1f} degrees")
     print("Combined Metric (MAP & distance) = ", combined_metric)
     print("Combined_metric (MAP, distance & heading) = ", combined_metric_with_head)
@@ -498,6 +522,7 @@ def test(data,
         # plot raw dist errors
         plot_errors(dist_errors_plot, bins=5, max_dist=distance_bins[-1][1], path=os.path.join(save_dir, 'dist_errors.pdf'))
         plot_dist_pred(dist_pred_and_gt, path = os.path.join(save_dir, 'dist_pred.pdf'))
+        plot_dist_err_per_class(dist_class_errs, path=os.path.join(save_dir, 'dist_err_per_class.png'))
 
         # plot heading errors
         plot_heading_pred(head_pred_and_gt, path=os.path.join(save_dir, 'head_pred.pdf'))
