@@ -238,27 +238,35 @@ def test(data,
             scale_coords(img[si].shape[1:], predn[:, :6], shapes[si][0], shapes[si][1])  # native-space pred
 
             # Append to text file
-            if save_txt:
-                gn = torch.tensor(shapes[si][0])[[1, 0, 1, 0]]  # normalization gain whwh
-                for *xyxy, conf, cls, dist, cosh, sinh in predn.tolist():
-                    xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                    line = (cls, *xywh, conf, dist, cosh, sinh) if save_conf else (cls, *xywh, dist, cosh, sinh)  # label format
+            for row in predn.tolist():
+                if len(row) == 8:
+                    *xyxy, conf, cls, dist, cosh, sinh = row
+                    xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()
+                    line = (cls, *xywh, conf, dist, cosh, sinh) if save_conf else (cls, *xywh, dist, cosh, sinh)
                     with open(save_dir / 'labels' / (path.stem + '.txt'), 'a') as f:
                         f.write(('%g ' * len(line)).rstrip() % line + '\n')
+                else:
+                    print(f"[WARN] Skipped predn row (len={len(row)}): {row}")
 
             # W&B logging - Media Panel Plots
-            if len(wandb_images) < log_imgs and wandb_logger.current_epoch > 0:  # Check for test operation
-                if wandb_logger.current_epoch % wandb_logger.bbox_interval == 0:
-                    if pred.shape[0] > 0:
-                        box_data = [{"position": {"minX": xyxy[0], "minY": xyxy[1], "maxX": xyxy[2], "maxY": xyxy[3]},
-                                 "class_id": int(cls),
-                                 "box_caption": "%s %.1f" % (names[cls], conf),
-                                 "scores": {"class_score": conf},
-                                 "distance": dist,
-                                 "heading": (math.degrees(math.atan2(sinh, cosh)) % 360),
-                                 "domain": "pixel"} for *xyxy, conf, cls, dist, cosh, sinh in pred.tolist()]
-                        boxes = {"predictions": {"box_data": box_data, "class_labels": names}}  # inference-space
-                        wandb_images.append(wandb_logger.wandb.Image(img[si], boxes=boxes, caption=path.name))
+            box_data = []
+            for row in pred.tolist():
+                if len(row) == 8:
+                    *xyxy, conf, cls, dist, cosh, sinh = row
+                    box_data.append({
+                        "position": {"minX": xyxy[0], "minY": xyxy[1], "maxX": xyxy[2], "maxY": xyxy[3]},
+                        "class_id": int(cls),
+                        "box_caption": "%s %.1f" % (names[cls], conf),
+                        "scores": {"class_score": conf},
+                        "distance": dist,
+                        "heading": (math.degrees(math.atan2(sinh, cosh)) % 360),
+                        "domain": "pixel"
+                    })
+                if len(row) != 8:
+                    print(f"[WARN] Invalid pred row (len={len(row)}): {row}")
+            if box_data:
+                    boxes = {"predictions": {"box_data": box_data, "class_labels": names}}  # inference-space
+                    wandb_images.append(wandb_logger.wandb.Image(img[si], boxes=boxes, caption=path.name))
             wandb_logger.log_training_progress(predn, path, names) if wandb_logger and wandb_logger.wandb_run else None
 
             # Append to pycocotools JSON dictionary
