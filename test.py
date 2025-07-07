@@ -239,31 +239,48 @@ def test(data,
 
             # Append to text file
             for row in predn.tolist():
-                if len(row) == 8:
+                if len(row) == 9:
                     *xyxy, conf, cls, dist, cosh, sinh = row
-                    xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()
-                    line = (cls, *xywh, conf, dist, cosh, sinh) if save_conf else (cls, *xywh, dist, cosh, sinh)
-                    with open(save_dir / 'labels' / (path.stem + '.txt'), 'a') as f:
-                        f.write(('%g ' * len(line)).rstrip() % line + '\n')
+                elif len(row) == 7:
+                    *xyxy, conf, cls, dist = row
+                    cosh, sinh = None, None  # heading fehlt
                 else:
                     print(f"[WARN] Skipped predn row (len={len(row)}): {row}")
+                    continue
+
+                xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()
+                if save_conf:
+                    line = (cls, *xywh, conf, dist)
+                    if cosh is not None and sinh is not None:
+                        line += (cosh, sinh)
+                else:
+                    line = (cls, *xywh, dist)
+                    if cosh is not None and sinh is not None:
+                        line += (cosh, sinh)
+
+                with open(save_dir / 'labels' / (path.stem + '.txt'), 'a') as f:
+                    f.write(('%g ' * len(line)).rstrip() % line + '\n')
 
             # W&B logging - Media Panel Plots
             box_data = []
             for row in pred.tolist():
-                if len(row) == 8:
+                if len(row) == 9:
                     *xyxy, conf, cls, dist, cosh, sinh = row
-                    box_data.append({
-                        "position": {"minX": xyxy[0], "minY": xyxy[1], "maxX": xyxy[2], "maxY": xyxy[3]},
-                        "class_id": int(cls),
-                        "box_caption": "%s %.1f" % (names[cls], conf),
-                        "scores": {"class_score": conf},
-                        "distance": dist,
-                        "heading": (math.degrees(math.atan2(sinh, cosh)) % 360),
-                        "domain": "pixel"
-                    })
-                if len(row) != 8:
-                    print(f"[WARN] Invalid pred row (len={len(row)}): {row}")
+                elif len(row) == 7:
+                    *xyxy, conf, cls, dist = row
+                    cosh, sinh = None, None
+                else:
+                    print(f"[WARN] Skipped predn row (len={len(row)}): {row}")
+                    continue
+                box_data.append({
+                    "position": {"minX": xyxy[0], "minY": xyxy[1], "maxX": xyxy[2], "maxY": xyxy[3]},
+                    "class_id": int(cls),
+                    "box_caption": "%s %.1f" % (names[cls], conf),
+                    "scores": {"class_score": conf},
+                    "distance": dist,
+                    "heading": (math.degrees(math.atan2(sinh, cosh)) % 360),
+                    "domain": "pixel"
+                })
             if box_data:
                     boxes = {"predictions": {"box_data": box_data, "class_labels": names}}  # inference-space
                     wandb_images.append(wandb_logger.wandb.Image(img[si], boxes=boxes, caption=path.name))
