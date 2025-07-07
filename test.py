@@ -300,7 +300,7 @@ def test(data,
                                 target_cosh = labels[d, -2]
                                 target_sinh = labels[d, -1]
 
-                                if target_dist == -1 or (target_cosh == 0 and target_sinh == 0):
+                                if target_dist == -1:
                                     continue
 
                                 # calculate distance error
@@ -311,6 +311,9 @@ def test(data,
                                 # distance_errors.append(distance_error.item())
                                 distance_conf_and_error_and_gt = [float(pred_conf), float(distance_error), float(target_dist), float(pred_dist)]
                                 distance_errors_per_cat[int(cls)].append(distance_conf_and_error_and_gt)
+
+                                if target_cosh == 0 and target_sinh == 0:
+                                    continue
 
                                 target_head = torch.rad2deg(torch.arctan2(target_sinh, target_cosh)) % 360
                                 pred_head = torch.rad2deg(torch.arctan2(pred_sinh, pred_cosh)) % 360
@@ -370,12 +373,11 @@ def test(data,
     mean_abs_dist_err_boat_comp = None
     weighted_mean_dist_err_boat_comp = None
 
-    # TODO: does error with confidence make sense?
     # print(distance_errors)
     for distance_err in distance_errors:
-        if 0 in distance_err.keys():
-            for obj_disst_pair in distance_err[0]:
-                dconf, derror, gt, pred = obj_disst_pair
+        for class_id, obj_dist_pairs in distance_err.items():
+            for obj_dist_pair in obj_dist_pairs:
+                dconf, derror, gt, pred = obj_dist_pair
                 total_mean_dist_err_boat += dconf * derror / gt
                 abs_dist_err_boat += derror
                 total_conf_boat += dconf
