@@ -249,15 +249,16 @@ def test(data,
             # W&B logging - Media Panel Plots
             if len(wandb_images) < log_imgs and wandb_logger.current_epoch > 0:  # Check for test operation
                 if wandb_logger.current_epoch % wandb_logger.bbox_interval == 0:
-                    box_data = [{"position": {"minX": xyxy[0], "minY": xyxy[1], "maxX": xyxy[2], "maxY": xyxy[3]},
+                    if pred.shape[0] > 0:
+                        box_data = [{"position": {"minX": xyxy[0], "minY": xyxy[1], "maxX": xyxy[2], "maxY": xyxy[3]},
                                  "class_id": int(cls),
                                  "box_caption": "%s %.1f" % (names[cls], conf),
                                  "scores": {"class_score": conf},
                                  "distance": dist,
                                  "heading": (math.degrees(math.atan2(sinh, cosh)) % 360),
                                  "domain": "pixel"} for *xyxy, conf, cls, dist, cosh, sinh in pred.tolist()]
-                    boxes = {"predictions": {"box_data": box_data, "class_labels": names}}  # inference-space
-                    wandb_images.append(wandb_logger.wandb.Image(img[si], boxes=boxes, caption=path.name))
+                        boxes = {"predictions": {"box_data": box_data, "class_labels": names}}  # inference-space
+                        wandb_images.append(wandb_logger.wandb.Image(img[si], boxes=boxes, caption=path.name))
             wandb_logger.log_training_progress(predn, path, names) if wandb_logger and wandb_logger.wandb_run else None
 
             # Append to pycocotools JSON dictionary
