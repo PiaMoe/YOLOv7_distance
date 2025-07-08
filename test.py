@@ -211,7 +211,7 @@ def test(data,
             targets[:, 2:-3] *= torch.Tensor([width, height, width, height]).to(device)  # to pixels
             lb = [targets[targets[:, 0] == i, 1:] for i in range(nb)] if save_hybrid else []  # for autolabelling
             t = time_synchronized()
-            out = non_max_suppression(out, conf_thres=conf_thres, iou_thres=iou_thres, labels=lb, multi_label=True)
+            out = non_max_suppression(out, conf_thres=conf_thres, iou_thres=iou_thres, labels=lb, multi_label=False)
             t1 += time_synchronized() - t
 
         # Statistics per image
@@ -286,7 +286,7 @@ def test(data,
                 tbox = xywh2xyxy(labels[:, 1:5])
                 scale_coords(img[si].shape[1:], tbox, shapes[si][0], shapes[si][1])  # native-space labels
                 if plots:
-                    confusion_matrix.process_batch(predn[:,:-1], torch.cat((labels[:, 0:1], tbox), 1))
+                    confusion_matrix.process_batch(predn[:,:-3], torch.cat((labels[:, 0:1], tbox), 1))
                 distance_errors_per_cat = {}
                 head_errors_per_cat = {}
                 # Per target class
