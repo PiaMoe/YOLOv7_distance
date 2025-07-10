@@ -131,6 +131,8 @@ def detect(save_img=False):
                     heading_rad = torch.arctan2(sinh, cosh)  # in radians [-π, π]
                     heading_deg = torch.rad2deg(heading_rad) % 360  # wrap to [0, 360)
                     heading = heading_deg
+                    if cls != 0:  # only predict heading for boats
+                        heading = None
                     if save_txt:  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                         line = (cls, *xywh, conf, distance, cosh, sinh, heading) if opt.save_conf else (cls, *xywh, distance, cosh, sinh, heading)  # label format
@@ -140,7 +142,8 @@ def detect(save_img=False):
                     if save_img or view_img:  # Add bbox to image
                         # label = f'{names[int(cls)]} {conf:.2f} {max(0,min(distance*1000,1000)):.2f}'
                         # label = f'{names[int(cls)]} {conf:.2f} {max(0,min(distance,1000)):.1f}'
-                        label = f'{names[int(cls)]} {conf:.2f} {distance:.1f} {heading:.1f}' # i believe clipping is taken care of in inference yolo, distance
+                        # I believe clipping is taken care of in inference yolo, distance
+                        label = f'{names[int(cls)]} {conf:.2f} {distance:.1f} {heading:.1f}' if heading else f'{names[int(cls)]} {conf:.2f} {distance:.1f}'
                         color = get_color_based_on_distance(distance)
                         # plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
                         if color == (0, 250, 250):
