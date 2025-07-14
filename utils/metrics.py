@@ -11,7 +11,7 @@ from . import general
 
 def fitness(x):
     # Model fitness as a weighted combination of metrics
-    w = [0.0, 0.0, 0.1, 0.7, 0.1, 0.1]  # weights for [P, R, mAP@0.5, mAP@0.5:0.95, distance error, combined metric]
+    w = [0.0, 0.0, 0.1, 0.7, 0.2, 0.2]  # weights for [P, R, mAP@0.5, mAP@0.5:0.95, distance error, heading error]
     return (x[:, :6] * w).sum(1)
 
 

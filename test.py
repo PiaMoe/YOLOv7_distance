@@ -573,10 +573,12 @@ def test(data,
 
     dist_err = 1 - min(overall_weighted_mean_dist_err_boat, 1)
     dist_err = round(dist_err, 4)
+    head_err = 1 - min(mean_heading_error_normalized, 1)
+    head_err = round(head_err, 4)
     print(f"\nresults:\nmp: {mp}\nmr: {mr}\nmap50: {map50}\nmap: {map}\ndist err: {dist_err}"
-          f"\ncombined metric: {combined_metric}\nlosses: {(loss.cpu() / len(dataloader)).tolist()}")
+          f"\nhead err: {head_err}\nlosses: {(loss.cpu() / len(dataloader)).tolist()}")
     # calculate mean losses (currently summed over all batches)
-    return (mp, mr, map50, map, dist_err, combined_metric,
+    return (mp, mr, map50, map, dist_err, head_err,
             *(loss.cpu() / len(dataloader)).tolist()), maps, t
 
 
