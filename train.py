@@ -294,6 +294,17 @@ def train(hyp, opt, device, tb_writer=None):
     model.class_weights = labels_to_class_weights(dataset.labels, nc).to(device) * nc  # attach class weights
     model.names = names
 
+    # Freeze backbone
+    if opt.freeze_backbone:
+        logger.info('Freezing backbone layers')
+        for i, layer in enumerate(model.model[:104]):
+            for param in layer.parameters():
+                param.requires_grad = False
+    frozen_layers = sum([not p.requires_grad for p in model.parameters()])
+    total_layers = sum([1 for p in model.parameters()])
+    print(f"Frozen {frozen_layers} of {total_layers} parameter tensors")
+
+
     # Start training
     t0 = time.time()
     nw = max(round(hyp['warmup_epochs'] * nb), 1000)  # number of warmup iterations, max(3 epochs, 1k iterations)
@@ -595,6 +606,7 @@ if __name__ == '__main__':
     parser.add_argument('--freeze', nargs='+', type=int, default=[0], help='Freeze layers: backbone of yolov7=50, first3=0 1 2')
     parser.add_argument('--v5-metric', action='store_true', help='assume maximum recall as 1.0 in AP calculation')
     parser.add_argument('--early-stopping', type=int, default=50, help='stop training if no improvement in x epochs')
+    parser.add_argument('--freeze_backbone', action='store_true', help='freeze backbone layers')
     opt = parser.parse_args()
 
     # Set DDP variables
