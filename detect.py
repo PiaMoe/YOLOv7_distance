@@ -6,6 +6,7 @@ import cv2
 import torch
 import torch.backends.cudnn as cudnn
 from numpy import random
+import numpy as np
 
 from models.experimental import attempt_load
 from utils.datasets import LoadStreams, LoadImages
@@ -23,6 +24,27 @@ def get_color_based_on_distance(distance):
         return (0, 250, 250)  # Yellow in BGR
     else:
         return (255, 0, 0)  # Blue in BGR
+
+
+def get_class_color_with_distance(cls_name, distance):
+    # Basisfarben in BGR
+    base_colors = {
+        'boat': (0, 100, 0),     # dark green
+        'buoy': (0, 0, 100),     # dark red
+    }
+    base_color = base_colors.get(cls_name, (50, 50, 50))
+    # brightness factor based on distance
+    if distance <= 50:
+        factor = 1.0  # dark
+    elif distance <= 150:
+        factor = 1.5
+    elif distance <= 300:
+        factor = 2.0
+    else:
+        factor = 2.5  # bright
+    scaled_color = tuple(int(min(c * factor, 255)) for c in base_color)
+    return scaled_color
+
 
 def detect(save_img=False):
     source, weights, view_img, save_txt, imgsz, trace = opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size, not opt.no_trace
@@ -144,9 +166,9 @@ def detect(save_img=False):
                         # label = f'{names[int(cls)]} {conf:.2f} {max(0,min(distance,1000)):.1f}'
                         # I believe clipping is taken care of in inference yolo, distance
                         label = f'{names[int(cls)]} {conf:.2f} {distance:.1f} {heading:.1f}' if heading else f'{names[int(cls)]} {conf:.2f} {distance:.1f}'
-                        color = get_color_based_on_distance(distance)
+                        color = get_class_color_with_distance(names[int(cls)], distance)
                         # plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
-                        if color == (0, 250, 250):
+                        if color == (0, 250, 250) or distance > 300:
                             txtcolor = [0, 0, 0]
                         else:
                             txtcolor = [255,255,255]
