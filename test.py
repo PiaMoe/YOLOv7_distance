@@ -190,7 +190,7 @@ def test(data,
                 pred_det = [x.float() for x in detect_train_out]
                 pred_dis = [x.float() for x in distance_train_out]
                 pred_head = [x.float() for x in heading_train_out]
-                L = compute_loss(pred_det, pred_dis, pred_head, loss_targets)[1][:5]  # box, obj, cls, dist, heading
+                L = compute_loss(pred_det, pred_dis, pred_head, loss_targets, is_train=False)[1][:5]  # box, obj, cls, dist, heading
                 L = torch.round(L * 1e4) / 1e4
                 loss += L
 

@@ -113,69 +113,71 @@ def train(hyp, opt, device, tb_writer=None):
     logger.info(f"Scaled weight_decay = {hyp['weight_decay']}")
 
     pg0, pg1, pg2 = [], [], []  # optimizer parameter groups
-    for k, v in model.named_modules():
-        if hasattr(v, 'bias') and isinstance(v.bias, nn.Parameter):
-            pg2.append(v.bias)  # biases
-        if isinstance(v, nn.BatchNorm2d):
-            pg0.append(v.weight)  # no decay
-        elif hasattr(v, 'weight') and isinstance(v.weight, nn.Parameter):
-            pg1.append(v.weight)  # apply decay
-        if hasattr(v, 'im'):
-            if hasattr(v.im, 'implicit'):           
-                pg0.append(v.im.implicit)
-            else:
-                for iv in v.im:
-                    pg0.append(iv.implicit)
-        if hasattr(v, 'imc'):
-            if hasattr(v.imc, 'implicit'):           
-                pg0.append(v.imc.implicit)
-            else:
-                for iv in v.imc:
-                    pg0.append(iv.implicit)
-        if hasattr(v, 'imb'):
-            if hasattr(v.imb, 'implicit'):           
-                pg0.append(v.imb.implicit)
-            else:
-                for iv in v.imb:
-                    pg0.append(iv.implicit)
-        if hasattr(v, 'imo'):
-            if hasattr(v.imo, 'implicit'):           
-                pg0.append(v.imo.implicit)
-            else:
-                for iv in v.imo:
-                    pg0.append(iv.implicit)
-        if hasattr(v, 'ia'):
-            if hasattr(v.ia, 'implicit'):           
-                pg0.append(v.ia.implicit)
-            else:
-                for iv in v.ia:
-                    pg0.append(iv.implicit)
-        if hasattr(v, 'attn'):
-            if hasattr(v.attn, 'logit_scale'):   
-                pg0.append(v.attn.logit_scale)
-            if hasattr(v.attn, 'q_bias'):   
-                pg0.append(v.attn.q_bias)
-            if hasattr(v.attn, 'v_bias'):  
-                pg0.append(v.attn.v_bias)
-            if hasattr(v.attn, 'relative_position_bias_table'):  
-                pg0.append(v.attn.relative_position_bias_table)
-        if hasattr(v, 'rbr_dense'):
-            if hasattr(v.rbr_dense, 'weight_rbr_origin'):  
-                pg0.append(v.rbr_dense.weight_rbr_origin)
-            if hasattr(v.rbr_dense, 'weight_rbr_avg_conv'): 
-                pg0.append(v.rbr_dense.weight_rbr_avg_conv)
-            if hasattr(v.rbr_dense, 'weight_rbr_pfir_conv'):  
-                pg0.append(v.rbr_dense.weight_rbr_pfir_conv)
-            if hasattr(v.rbr_dense, 'weight_rbr_1x1_kxk_idconv1'): 
-                pg0.append(v.rbr_dense.weight_rbr_1x1_kxk_idconv1)
-            if hasattr(v.rbr_dense, 'weight_rbr_1x1_kxk_conv2'):   
-                pg0.append(v.rbr_dense.weight_rbr_1x1_kxk_conv2)
-            if hasattr(v.rbr_dense, 'weight_rbr_gconv_dw'):   
-                pg0.append(v.rbr_dense.weight_rbr_gconv_dw)
-            if hasattr(v.rbr_dense, 'weight_rbr_gconv_pw'):   
-                pg0.append(v.rbr_dense.weight_rbr_gconv_pw)
-            if hasattr(v.rbr_dense, 'vector'):   
-                pg0.append(v.rbr_dense.vector)
+    for layer_idx in [106, 107]:
+        m = model.model[layer_idx]
+        for k, v in m.named_modules():
+            if hasattr(v, 'bias') and isinstance(v.bias, nn.Parameter):
+                pg2.append(v.bias)  # biases
+            if isinstance(v, nn.BatchNorm2d):
+                pg0.append(v.weight)  # no decay
+            elif hasattr(v, 'weight') and isinstance(v.weight, nn.Parameter):
+                pg1.append(v.weight)  # apply decay
+            if hasattr(v, 'im'):
+                if hasattr(v.im, 'implicit'):           
+                    pg0.append(v.im.implicit)
+                else:
+                    for iv in v.im:
+                        pg0.append(iv.implicit)
+            if hasattr(v, 'imc'):
+                if hasattr(v.imc, 'implicit'):           
+                    pg0.append(v.imc.implicit)
+                else:
+                    for iv in v.imc:
+                        pg0.append(iv.implicit)
+            if hasattr(v, 'imb'):
+                if hasattr(v.imb, 'implicit'):           
+                    pg0.append(v.imb.implicit)
+                else:
+                    for iv in v.imb:
+                        pg0.append(iv.implicit)
+            if hasattr(v, 'imo'):
+                if hasattr(v.imo, 'implicit'):           
+                    pg0.append(v.imo.implicit)
+                else:
+                    for iv in v.imo:
+                        pg0.append(iv.implicit)
+            if hasattr(v, 'ia'):
+                if hasattr(v.ia, 'implicit'):           
+                    pg0.append(v.ia.implicit)
+                else:
+                    for iv in v.ia:
+                        pg0.append(iv.implicit)
+            if hasattr(v, 'attn'):
+                if hasattr(v.attn, 'logit_scale'):   
+                    pg0.append(v.attn.logit_scale)
+                if hasattr(v.attn, 'q_bias'):   
+                    pg0.append(v.attn.q_bias)
+                if hasattr(v.attn, 'v_bias'):  
+                    pg0.append(v.attn.v_bias)
+                if hasattr(v.attn, 'relative_position_bias_table'):  
+                    pg0.append(v.attn.relative_position_bias_table)
+            if hasattr(v, 'rbr_dense'):
+                if hasattr(v.rbr_dense, 'weight_rbr_origin'):  
+                    pg0.append(v.rbr_dense.weight_rbr_origin)
+                if hasattr(v.rbr_dense, 'weight_rbr_avg_conv'): 
+                    pg0.append(v.rbr_dense.weight_rbr_avg_conv)
+                if hasattr(v.rbr_dense, 'weight_rbr_pfir_conv'):  
+                    pg0.append(v.rbr_dense.weight_rbr_pfir_conv)
+                if hasattr(v.rbr_dense, 'weight_rbr_1x1_kxk_idconv1'): 
+                    pg0.append(v.rbr_dense.weight_rbr_1x1_kxk_idconv1)
+                if hasattr(v.rbr_dense, 'weight_rbr_1x1_kxk_conv2'):   
+                    pg0.append(v.rbr_dense.weight_rbr_1x1_kxk_conv2)
+                if hasattr(v.rbr_dense, 'weight_rbr_gconv_dw'):   
+                    pg0.append(v.rbr_dense.weight_rbr_gconv_dw)
+                if hasattr(v.rbr_dense, 'weight_rbr_gconv_pw'):   
+                    pg0.append(v.rbr_dense.weight_rbr_gconv_pw)
+                if hasattr(v.rbr_dense, 'vector'):   
+                    pg0.append(v.rbr_dense.vector)
 
     if opt.adam:
         optimizer = optim.Adam(pg0, lr=hyp['lr0'], betas=(hyp['momentum'], 0.999))  # adjust beta1 to momentum
@@ -324,6 +326,17 @@ def train(hyp, opt, device, tb_writer=None):
     early_stop_patience = opt.early_stopping
     early_stop_counter = 0
 
+    # make sure only last two layers are trainable
+    model.eval()
+    model.model[106].train()
+    model.model[107].train()
+
+    def freeze_bn(module):
+        if isinstance(module, torch.nn.BatchNorm2d):
+            print("freeze batchnorm layer")
+            module.eval()
+
+    model.apply(freeze_bn)
 
     for epoch in range(start_epoch, epochs):  # epoch ------------------------------------------------------------------
         model.train()
@@ -383,7 +396,7 @@ def train(hyp, opt, device, tb_writer=None):
                 #if 'loss_ota' not in hyp or hyp['loss_ota'] == 1:
                 #    loss, loss_items = compute_loss_ota(pred_det, targets.to(device))  # loss scaled by batch_size
                 #else:
-                loss, loss_items = compute_loss(pred_det, pred_dis, pred_head, targets.to(device))  # loss scaled by batch_size
+                loss, loss_items = compute_loss(pred_det, pred_dis, pred_head, targets.to(device), is_train=True)  # loss scaled by batch_size
                 if rank != -1:
                     loss *= opt.world_size  # gradient averaged between devices in DDP mode
                 if opt.quad:
@@ -391,12 +404,20 @@ def train(hyp, opt, device, tb_writer=None):
             if isinstance(loss, float):
                 loss = torch.tensor(loss, device=device)
 
+            #print("=== Trainierbare Parameter mit Gradients ===")
+            #for n, p in model.named_parameters():
+            #    if p.requires_grad:
+            #        if p.grad_fn is None and p.grad is None:
+            #            print(f"  ⚠️ {n} ist trainierbar, aber hat keinen Grad-FN (evtl. durch forward deaktiviert)")
+            #        else:
+            #            print(f"  ✓ {n}")
+
             # Backward
             scaler.scale(loss).backward()
             
-            for name, param in model.named_parameters():
-                if param.grad is None:
-                    print(f"⚠️  No gradient for: {name}")
+            #for name, param in model.named_parameters():
+                #if param.grad is None:
+                #    print(f"⚠️  No gradient for: {name}")
                 #else:
                     #print(f" Gradient for: {name}")
                 

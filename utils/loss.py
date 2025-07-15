@@ -471,7 +471,7 @@ class ComputeLoss:
         for k in 'na', 'nc', 'nl', 'anchors':
             setattr(self, k, getattr(det, k))
 
-    def __call__(self, p_det, p_dis, p_head, targets):  # predictions, targets, model
+    def __call__(self, p_det, p_dis, p_head, targets, is_train):  # predictions, targets, model
         device = targets.device
         lcls, lbox, lobj = torch.zeros(1, device=device), torch.zeros(1, device=device), torch.zeros(1, device=device)
         ldist = torch.zeros(1, device=device)
@@ -512,7 +512,7 @@ class ComputeLoss:
                     ldist += self.L1dist(pdist[valid_dist_mask], distance[valid_dist_mask])
                 else:
                     print("dummy distance loss computed")
-                    ldist += (pdist.sum() * 0.0)  # dummy gradient flow
+                    ldist += torch.zeros(1, device=ps_dis.device, requires_grad=True)
 
                 # Calculate MSE loss for distances
                 # ldist += self.MSEdist(pdist, distance)
@@ -534,7 +534,7 @@ class ComputeLoss:
                     lhead += ang_error
                 else:
                     print("dummy heading loss computed")
-                    lhead += (ps_head[:, -2:].sum() * 0.0) # dummy gradient flow
+                    lhead += torch.zeros(1, device=ps_head.device, requires_grad=True)
 
                 # Classification
                 if self.nc > 1:  # cls loss (only if multiple classes)
@@ -554,7 +554,23 @@ class ComputeLoss:
 
         if self.autobalance:
             self.balance = [x / self.balance[self.ssi] for x in self.balance]
-
+        
+        
+        # Fallback-Dummy, wenn beide Masken leer
+        if is_train and not ldist.requires_grad and not lhead.requires_grad:
+            print("❌ Kein valid_dist/head_mask in Batch! Erzeuge minimalen Dummy-Loss")
+            dummy_anchor = None
+            for x in [*p_dis, *p_head]:
+                if isinstance(x, torch.Tensor) and x.requires_grad:
+                    dummy_anchor = x
+                    break
+            if dummy_anchor is not None:
+                dummy_loss = dummy_anchor.view(-1)[0] * 0.0
+            else:
+                dummy_loss = torch.tensor(0.0, device=device, requires_grad=True)
+            ldist = dummy_loss
+            lhead = dummy_loss
+            
         lbox *= self.hyp['box']
         lobj *= self.hyp['obj']
         lcls *= self.hyp['cls']
@@ -563,7 +579,9 @@ class ComputeLoss:
 
         bs = tobj.shape[0]  # batch size
         loss = lbox + lobj + lcls + ldist + lhead
-        
+        loss_distHead = ldist + lhead 
+      
+
         def safe_tensor(x, device):
             if isinstance(x, torch.Tensor):
                 return x.view(1).to(device)
@@ -579,7 +597,7 @@ class ComputeLoss:
             safe_tensor(loss, loss.device)
         ]).detach()
 
-        return loss * bs, loss_items 
+        return loss_distHead * bs, loss_items 
 
     def build_targets(self, p_det, targets):
         # Build targets for compute_loss(), input targets(image,class,x,y,w,h)
