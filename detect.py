@@ -193,7 +193,7 @@ def detect(save_img=False):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', nargs='+', type=str, default='../runs/train/BOArDING_multHead/weights/best.pt', help='model.pt path(s)')
+    parser.add_argument('--weights', nargs='+', type=str, default='../runs/train/freezeMultHeadsall/weights/init.pt', help='model.pt path(s)')
     parser.add_argument('--source', type=str, default='../../../data/BOArDING_Dataset/BOArDING_cos_sin/val/images/', help='source')  # file/folder, 0 for webcam
     parser.add_argument('--img-size', type=int, default=1024, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='object confidence threshold')
@@ -210,7 +210,7 @@ if __name__ == '__main__':
     parser.add_argument('--project', default='runs/detect', help='save results to project/name')
     parser.add_argument('--name', default='exp', help='save results to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
-    parser.add_argument('--no-trace', action='store_true', help='don`t trace model')
+    parser.add_argument('--no-trace', action='store_true', help='don`t trace model', default=True)
     opt = parser.parse_args()
     print(opt)
     #check_requirements(exclude=('pycocotools', 'thop'))

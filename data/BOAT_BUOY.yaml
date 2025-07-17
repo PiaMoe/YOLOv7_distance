@@ -1,7 +1,7 @@
 #yaml file for YOLOv7
-train: /data/pmoessner/BOAT_BUOY_Dataset/train/images
-test: /data/pmoessner/BOAT_BUOY_Dataset/test/images
-val: /data/pmoessner/BOAT_BUOY_Dataset/val/images
+train: /home/pmoessner/data/BOAT_BUOY_Det/train/images
+test: /home/pmoessner/data/BOAT_BUOY_Det/test/images
+val: /home/pmoessner/data/BOAT_BUOY_Det/val/images
 
 nc: 2
-names: ['boat', 'buoy']
+names: ['0', '1']

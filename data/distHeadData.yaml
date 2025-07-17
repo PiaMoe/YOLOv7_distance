@@ -1,0 +1,7 @@
+#yaml file for YOLOv7
+train: /home/pmoessner/data/boat_distance_heading/train/images
+test: /home/pmoessner/data/boat_distance_heading/test/images
+val: /home/pmoessner/data/boat_distance_heading/val/images
+
+nc: 1
+names: ['boat']
