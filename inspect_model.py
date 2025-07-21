@@ -26,15 +26,6 @@ def compare_models(pt_paths: List[str], atol=0.0, max_print=5):
     all_base_keys = set(base_state.keys())
     non_trainable_base_keys = all_base_keys - base_trainable_keys
 
-    for idx, model in enumerate(models):
-        print(f"\nModell {idx}:")
-        for name, module in model.named_modules():
-            if "105" in name:
-                #print(f"Gefundenes Modul ({name}): {module}")
-                if hasattr(module, 'anchors'):
-                    print("anchors:\n", module.anchors)
-                if hasattr(module, 'anchor_grid'):
-                    print("anchor_grid:\n", module.anchor_grid)
 
     print(f"\n=== Vergleich von {len(models)} Modellen (trainierbare & nicht-trainierbare Parameter) ===")
 
@@ -121,6 +112,6 @@ def compare_models(pt_paths: List[str], atol=0.0, max_print=5):
 if __name__ == "__main__":
     pt_files = [
         "weights/bestDet.pt",
-        "weights/freezeMultHeadsallInit.pt"
+        "weights/init2.pt"
     ]
     compare_models(pt_files, max_print=15)
