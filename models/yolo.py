@@ -244,7 +244,7 @@ class Detect(nn.Module):
 
 
 class IDetect(nn.Module):
-    stride = [8.0, 16.0, 32.0]  # strides computed during build
+    stride = [8, 16, 32]  # strides computed during build
     export = False  # onnx export
     end2end = False
     include_nms = False
@@ -269,7 +269,7 @@ class IDetect(nn.Module):
         self.batch = 1
 
     def forward(self, x, epoch=1, batch_i=1):
-        self.stride = [8.0, 16.0, 32.0]  # default strides
+        self.stride = [8, 16, 32]  # default strides
         self.epoch = epoch
         self.batch_i = batch_i
         # x = x.copy()  # for profiling
@@ -297,7 +297,7 @@ class IDetect(nn.Module):
         return x if self.training else (torch.cat(z, 1), x)
 
     def fuseforward(self, x, epoch=1, batch_i=1):
-        self.stride = [8.0, 16.0, 32.0]  # default strides
+        self.stride = [8, 16, 32]  # default strides
         # x = x.copy()  # for profiling
         z = []  # inference output
         self.training |= self.export
@@ -702,7 +702,7 @@ class Model(nn.Module):
                 # print('Strides: %s' % m.stride.tolist())
             if isinstance(m, (IDetect, IDistance, IHeading)):
                 s = 256  # 2x min stride
-                m.stride = [8.0, 16.0, 32.0]
+                m.stride = [8, 16, 32]
                 check_anchor_order(m)
                 m.anchors /= m.stride.view(-1, 1, 1)
                 self.stride = m.stride
