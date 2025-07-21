@@ -17,6 +17,7 @@ import torch.optim.lr_scheduler as lr_scheduler
 import torch.utils.data
 import yaml
 from torch import amp
+from torch.cuda.amp import GradScaler
 from torch.nn.parallel import DistributedDataParallel as DDP
 # from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
@@ -86,7 +87,7 @@ def train(hyp, opt, device, tb_writer=None):
             attempt_download(weights)  # download if not found locally
         ckpt = torch.load(weights, map_location=device, weights_only=False)  # load checkpoint
         model = Model(opt.cfg or ckpt['model'].yaml, ch=3, nc=nc, anchors=hyp.get('anchors'), hyp=hyp).to(device)  # create
-        exclude = ['anchor'] if (opt.cfg or hyp.get('anchors')) and not opt.resume else []  # exclude keys
+        exclude = [] #['anchor'] if (opt.cfg or hyp.get('anchors')) and not opt.resume else []  # exclude keys
         state_dict = ckpt['model'].float().state_dict()  # to FP32
         state_dict = intersect_dicts(state_dict, model.state_dict(), exclude=exclude)  # intersect
         model.load_state_dict(state_dict, strict=False)  # load
@@ -113,71 +114,69 @@ def train(hyp, opt, device, tb_writer=None):
     logger.info(f"Scaled weight_decay = {hyp['weight_decay']}")
 
     pg0, pg1, pg2 = [], [], []  # optimizer parameter groups
-    for layer_idx in [106, 107]:
-        m = model.model[layer_idx]
-        for k, v in m.named_modules():
-            if hasattr(v, 'bias') and isinstance(v.bias, nn.Parameter):
-                pg2.append(v.bias)  # biases
-            if isinstance(v, nn.BatchNorm2d):
-                pg0.append(v.weight)  # no decay
-            elif hasattr(v, 'weight') and isinstance(v.weight, nn.Parameter):
-                pg1.append(v.weight)  # apply decay
-            if hasattr(v, 'im'):
-                if hasattr(v.im, 'implicit'):           
-                    pg0.append(v.im.implicit)
-                else:
-                    for iv in v.im:
-                        pg0.append(iv.implicit)
-            if hasattr(v, 'imc'):
-                if hasattr(v.imc, 'implicit'):           
-                    pg0.append(v.imc.implicit)
-                else:
-                    for iv in v.imc:
-                        pg0.append(iv.implicit)
-            if hasattr(v, 'imb'):
-                if hasattr(v.imb, 'implicit'):           
-                    pg0.append(v.imb.implicit)
-                else:
-                    for iv in v.imb:
-                        pg0.append(iv.implicit)
-            if hasattr(v, 'imo'):
-                if hasattr(v.imo, 'implicit'):           
-                    pg0.append(v.imo.implicit)
-                else:
-                    for iv in v.imo:
-                        pg0.append(iv.implicit)
-            if hasattr(v, 'ia'):
-                if hasattr(v.ia, 'implicit'):           
-                    pg0.append(v.ia.implicit)
-                else:
-                    for iv in v.ia:
-                        pg0.append(iv.implicit)
-            if hasattr(v, 'attn'):
-                if hasattr(v.attn, 'logit_scale'):   
-                    pg0.append(v.attn.logit_scale)
-                if hasattr(v.attn, 'q_bias'):   
-                    pg0.append(v.attn.q_bias)
-                if hasattr(v.attn, 'v_bias'):  
-                    pg0.append(v.attn.v_bias)
-                if hasattr(v.attn, 'relative_position_bias_table'):  
-                    pg0.append(v.attn.relative_position_bias_table)
-            if hasattr(v, 'rbr_dense'):
-                if hasattr(v.rbr_dense, 'weight_rbr_origin'):  
-                    pg0.append(v.rbr_dense.weight_rbr_origin)
-                if hasattr(v.rbr_dense, 'weight_rbr_avg_conv'): 
-                    pg0.append(v.rbr_dense.weight_rbr_avg_conv)
-                if hasattr(v.rbr_dense, 'weight_rbr_pfir_conv'):  
-                    pg0.append(v.rbr_dense.weight_rbr_pfir_conv)
-                if hasattr(v.rbr_dense, 'weight_rbr_1x1_kxk_idconv1'): 
-                    pg0.append(v.rbr_dense.weight_rbr_1x1_kxk_idconv1)
-                if hasattr(v.rbr_dense, 'weight_rbr_1x1_kxk_conv2'):   
-                    pg0.append(v.rbr_dense.weight_rbr_1x1_kxk_conv2)
-                if hasattr(v.rbr_dense, 'weight_rbr_gconv_dw'):   
-                    pg0.append(v.rbr_dense.weight_rbr_gconv_dw)
-                if hasattr(v.rbr_dense, 'weight_rbr_gconv_pw'):   
-                    pg0.append(v.rbr_dense.weight_rbr_gconv_pw)
-                if hasattr(v.rbr_dense, 'vector'):   
-                    pg0.append(v.rbr_dense.vector)
+    for k, v in model.named_modules():
+        if hasattr(v, 'bias') and isinstance(v.bias, nn.Parameter):
+            pg2.append(v.bias)  # biases
+        if isinstance(v, nn.BatchNorm2d):
+            pg0.append(v.weight)  # no decay
+        elif hasattr(v, 'weight') and isinstance(v.weight, nn.Parameter):
+            pg1.append(v.weight)  # apply decay
+        if hasattr(v, 'im'):
+            if hasattr(v.im, 'implicit'):
+                pg0.append(v.im.implicit)
+            else:
+                for iv in v.im:
+                    pg0.append(iv.implicit)
+        if hasattr(v, 'imc'):
+            if hasattr(v.imc, 'implicit'):
+                pg0.append(v.imc.implicit)
+            else:
+                for iv in v.imc:
+                    pg0.append(iv.implicit)
+        if hasattr(v, 'imb'):
+            if hasattr(v.imb, 'implicit'):
+                pg0.append(v.imb.implicit)
+            else:
+                for iv in v.imb:
+                    pg0.append(iv.implicit)
+        if hasattr(v, 'imo'):
+            if hasattr(v.imo, 'implicit'):
+                pg0.append(v.imo.implicit)
+            else:
+                for iv in v.imo:
+                    pg0.append(iv.implicit)
+        if hasattr(v, 'ia'):
+            if hasattr(v.ia, 'implicit'):
+                pg0.append(v.ia.implicit)
+            else:
+                for iv in v.ia:
+                    pg0.append(iv.implicit)
+        if hasattr(v, 'attn'):
+            if hasattr(v.attn, 'logit_scale'):
+                pg0.append(v.attn.logit_scale)
+            if hasattr(v.attn, 'q_bias'):
+                pg0.append(v.attn.q_bias)
+            if hasattr(v.attn, 'v_bias'):
+                pg0.append(v.attn.v_bias)
+            if hasattr(v.attn, 'relative_position_bias_table'):
+                pg0.append(v.attn.relative_position_bias_table)
+        if hasattr(v, 'rbr_dense'):
+            if hasattr(v.rbr_dense, 'weight_rbr_origin'):
+                pg0.append(v.rbr_dense.weight_rbr_origin)
+            if hasattr(v.rbr_dense, 'weight_rbr_avg_conv'):
+                pg0.append(v.rbr_dense.weight_rbr_avg_conv)
+            if hasattr(v.rbr_dense, 'weight_rbr_pfir_conv'):
+                pg0.append(v.rbr_dense.weight_rbr_pfir_conv)
+            if hasattr(v.rbr_dense, 'weight_rbr_1x1_kxk_idconv1'):
+                pg0.append(v.rbr_dense.weight_rbr_1x1_kxk_idconv1)
+            if hasattr(v.rbr_dense, 'weight_rbr_1x1_kxk_conv2'):
+                pg0.append(v.rbr_dense.weight_rbr_1x1_kxk_conv2)
+            if hasattr(v.rbr_dense, 'weight_rbr_gconv_dw'):
+                pg0.append(v.rbr_dense.weight_rbr_gconv_dw)
+            if hasattr(v.rbr_dense, 'weight_rbr_gconv_pw'):
+                pg0.append(v.rbr_dense.weight_rbr_gconv_pw)
+            if hasattr(v.rbr_dense, 'vector'):
+                pg0.append(v.rbr_dense.vector)
 
     if opt.adam:
         optimizer = optim.Adam(pg0, lr=hyp['lr0'], betas=(hyp['momentum'], 0.999))  # adjust beta1 to momentum
@@ -296,15 +295,6 @@ def train(hyp, opt, device, tb_writer=None):
     model.class_weights = labels_to_class_weights(dataset.labels, nc).to(device) * nc  # attach class weights
     model.names = names
 
-    # Freeze backbone
-    if opt.freeze_backbone:
-        logger.info('Freezing backbone layers')
-        for i, layer in enumerate(model.model[:104]):
-            for param in layer.parameters():
-                param.requires_grad = False
-    frozen_layers = sum([not p.requires_grad for p in model.parameters()])
-    total_layers = sum([1 for p in model.parameters()])
-    print(f"Frozen {frozen_layers} of {total_layers} parameter tensors")
 
 
     # Start training
@@ -314,7 +304,7 @@ def train(hyp, opt, device, tb_writer=None):
     maps = np.zeros(nc)  # mAP per class
     results = (0, 0, 0, 0, 0, 0, 0)  # P, R, mAP@.5, mAP@.5-.95, val_loss(box, obj, cls)
     scheduler.last_epoch = start_epoch - 1  # do not move
-    scaler = amp.GradScaler('cuda')
+    scaler = GradScaler(enabled=cuda)
     compute_loss_ota = ComputeLossOTA(model)  # init loss class
     compute_loss = ComputeLoss(model)  # init loss class
     logger.info(f'Image sizes {imgsz} train, {imgsz_test} test\n'
@@ -326,17 +316,6 @@ def train(hyp, opt, device, tb_writer=None):
     early_stop_patience = opt.early_stopping
     early_stop_counter = 0
 
-    # make sure only last two layers are trainable
-    model.eval()
-    model.model[106].train()
-    model.model[107].train()
-
-    def freeze_bn(module):
-        if isinstance(module, torch.nn.BatchNorm2d):
-            print("freeze batchnorm layer")
-            module.eval()
-
-    model.apply(freeze_bn)
 
     for epoch in range(start_epoch, epochs):  # epoch ------------------------------------------------------------------
         model.train()
@@ -404,23 +383,7 @@ def train(hyp, opt, device, tb_writer=None):
             if isinstance(loss, float):
                 loss = torch.tensor(loss, device=device)
 
-            #print("=== Trainierbare Parameter mit Gradients ===")
-            #for n, p in model.named_parameters():
-            #    if p.requires_grad:
-            #        if p.grad_fn is None and p.grad is None:
-            #            print(f"  ⚠️ {n} ist trainierbar, aber hat keinen Grad-FN (evtl. durch forward deaktiviert)")
-            #        else:
-            #            print(f"  ✓ {n}")
-
-            # Backward
             scaler.scale(loss).backward()
-            
-            #for name, param in model.named_parameters():
-                #if param.grad is None:
-                #    print(f"⚠️  No gradient for: {name}")
-                #else:
-                    #print(f" Gradient for: {name}")
-                
 
             # Optimize
             if ni % accumulate == 0:
@@ -590,11 +553,11 @@ def train(hyp, opt, device, tb_writer=None):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', type=str, default='weights/yolov7.pt', help='initial weights path')
+    parser.add_argument('--weights', type=str, default='weights/bestDet.pt', help='initial weights path')
     parser.add_argument('--cfg', type=str, default='cfg/training/yolov7_custom.yaml', help='model.yaml path')
     parser.add_argument('--data', type=str, default='data/debug_data.yaml', help='data.yaml path')
     parser.add_argument('--hyp', type=str, default='data/hyp.scratch.p5.yaml', help='hyperparameters path')
-    parser.add_argument('--epochs', type=int, default=3)
+    parser.add_argument('--epochs', type=int, default=1)
     parser.add_argument('--batch-size', type=int, default=4, help='total batch size for all GPUs')
     parser.add_argument('--img-size', nargs='+', type=int, default=[1024, 1024], help='[train, test] image sizes')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
@@ -627,7 +590,6 @@ if __name__ == '__main__':
     parser.add_argument('--freeze', nargs='+', type=int, default=[0], help='Freeze layers: backbone of yolov7=50, first3=0 1 2')
     parser.add_argument('--v5-metric', action='store_true', help='assume maximum recall as 1.0 in AP calculation')
     parser.add_argument('--early-stopping', type=int, default=50, help='stop training if no improvement in x epochs')
-    parser.add_argument('--freeze_backbone', action='store_true', help='freeze backbone layers')
     opt = parser.parse_args()
 
     # Set DDP variables
