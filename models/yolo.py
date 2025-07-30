@@ -50,7 +50,20 @@ class IDistance(nn.Module):
             a = torch.tensor(anchors).float().view(self.nl, -1, 2)
             self.register_buffer('anchors', a)  # shape(nl,na,2)
             self.register_buffer('anchor_grid', a.clone().view(self.nl, 1, -1, 1, 1, 2))  # shape(nl,1,na,1,1,2)
-            self.m = nn.ModuleList(nn.Conv2d(x, self.na * 1, 1) for x in ch)  # 1 = distance
+
+            # original implementation (only 1x1 conv)
+            #self.m = nn.ModuleList(nn.Conv2d(x, self.na * 1, 1) for x in ch)  # 1 = distance
+
+            self.m = nn.ModuleList(
+                nn.Sequential(
+                    nn.Conv2d(x, x, 3, padding=1),
+                    nn.BatchNorm2d(x),
+                    nn.ReLU(),
+                    nn.Conv2d(x, self.na * 1, 1)  # 1 = distance
+                )
+                for x in ch
+            )
+
             self.ia = nn.ModuleList(ImplicitA(x) for x in ch)
             self.im = nn.ModuleList(ImplicitM(self.no * self.na) for _ in ch)
 
@@ -115,7 +128,20 @@ class IHeading(nn.Module):
         a = torch.tensor(anchors).float().view(self.nl, -1, 2)
         self.register_buffer('anchors', a)  # shape(nl,na,2)
         self.register_buffer('anchor_grid', a.clone().view(self.nl, 1, -1, 1, 1, 2))  # shape(nl,1,na,1,1,2)
-        self.m = nn.ModuleList(nn.Conv2d(x, self.na * 2, 1) for x in ch)  # 2 = sin, cos
+
+        # original implementation (only 1x1 conv)
+        #self.m = nn.ModuleList(nn.Conv2d(x, self.na * 2, 1) for x in ch)  # 2 = sin, cos
+
+        self.m = nn.ModuleList(
+            nn.Sequential(
+                nn.Conv2d(x, x, 3, padding=1),
+                nn.BatchNorm2d(x),
+                nn.ReLU(),
+                nn.Conv2d(x, self.na * 2, 1)  # output = sin, cos
+            )
+            for x in ch
+        )
+
         self.ia = nn.ModuleList(ImplicitA(x) for x in ch)
         self.im = nn.ModuleList(ImplicitM(self.no * self.na) for _ in ch)
 
