@@ -1,5 +1,5 @@
 # Modifications in branches:
-- [main](https://github.com/PiaMoe/YOLOv7_distance/tree/main)): Original implementation from the referenced paper (see this README).
+- [main](https://github.com/PiaMoe/YOLOv7_distance/tree/main): Original implementation from the referenced paper (see this README).
 - [distance_network](https://github.com/PiaMoe/YOLOv7_distance/tree/distance_network): Object detection + additional distance estimation 
 - [distance_heading_network](https://github.com/PiaMoe/YOLOv7_distance/tree/distance_heading_network): Object detection + additional distance and heading estimation (single head). Heading is represented as a single scalar value.
 - [distance_scHeading](https://github.com/PiaMoe/YOLOv7_distance/tree/distance_network): Object detection + additional distance and heading estimation (single head). Heading is represented as a 2D vector of sine and cosine.
