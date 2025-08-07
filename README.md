@@ -7,6 +7,8 @@
 - [2-stage_predictor](https://github.com/PiaMoe/YOLOv7_distance/tree/2-stage_predictor): YOLO object detection network + additional network for distance and heading estimation based on cropped detections.
 
 
+All modifications only support the "normal" YOLOv7 model, not
+bigger ones. 
 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
 
