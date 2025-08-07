@@ -1,10 +1,10 @@
 # Modifications in branches:
-- [main](https://github.com/PiaMoe/YOLOv7-DL23/tree/main): Original implementation from the referenced paper (see this README).
-- [distance_network](https://github.com/PiaMoe/YOLOv7-DL23/tree/distance_network): Object detection + additional distance estimation 
-- [distance_heading_network](https://github.com/PiaMoe/YOLOv7-DL23/tree/distance_heading_network): Object detection + additional distance and heading estimation (single head). Heading is represented as a single scalar value.
-- [distance_scHeading](https://github.com/PiaMoe/YOLOv7-DL23/tree/distance_network): Object detection + additional distance and heading estimation (single head). Heading is represented as a 2D vector of sine and cosine.
-- [different_heads](https://github.com/PiaMoe/YOLOv7-DL23/tree/different_heads): Object detection + additional distance and heading estimation. Model architecture with 3 heads, one for each task. Heading is represented 2D vector of sine and cosine.
-- [2-stage_predictor](https://github.com/PiaMoe/YOLOv7-DL23/tree/2-stage_predictor): YOLO object detection network + additional network for distance and heading estimation based on cropped detections.
+- [main](https://github.com/PiaMoe/YOLOv7_distance/tree/main)): Original implementation from the referenced paper (see this README).
+- [distance_network](https://github.com/PiaMoe/YOLOv7_distance/tree/distance_network): Object detection + additional distance estimation 
+- [distance_heading_network](https://github.com/PiaMoe/YOLOv7_distance/tree/distance_heading_network): Object detection + additional distance and heading estimation (single head). Heading is represented as a single scalar value.
+- [distance_scHeading](https://github.com/PiaMoe/YOLOv7_distance/tree/distance_network): Object detection + additional distance and heading estimation (single head). Heading is represented as a 2D vector of sine and cosine.
+- [different_heads](https://github.com/PiaMoe/YOLOv7_distance/tree/different_heads): Object detection + additional distance and heading estimation. Model architecture with 3 heads, one for each task. Heading is represented 2D vector of sine and cosine.
+- [2-stage_predictor](https://github.com/PiaMoe/YOLOv7_distance/tree/2-stage_predictor): YOLO object detection network + additional network for distance and heading estimation based on cropped detections.
 
 
 
