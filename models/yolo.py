@@ -55,16 +55,6 @@ class IDistance(nn.Module):
             #self.m = nn.ModuleList(nn.Conv2d(x, self.na * 1, 1) for x in ch)  # 1 = distance
 
             # variation with 3x3 conv and batchnorm
-            #self.m = nn.ModuleList(
-            #    nn.Sequential(
-            #        nn.Conv2d(x, x, 3, padding=1),
-            #        nn.BatchNorm2d(x),
-            #        nn.ReLU(),
-            #        nn.Conv2d(x, self.na * 1, 1)  # 1 = distance
-            #    )
-            #    for x in ch
-            #)
-
             def dist_block(in_ch, out_ch):
                 mid_ch = in_ch // 2
                 return nn.Sequential(
@@ -78,7 +68,7 @@ class IDistance(nn.Module):
                 )
 
             self.m = nn.ModuleList(
-                dist_block(x, self.na * 2) for x in ch
+                dist_block(x, self.na * 1) for x in ch
             )
 
             self.ia = nn.ModuleList(ImplicitA(x) for x in ch)
@@ -150,16 +140,6 @@ class IHeading(nn.Module):
         #self.m = nn.ModuleList(nn.Conv2d(x, self.na * 2, 1) for x in ch)  # 2 = sin, cos
 
         # variation with 3x3 conv and batchnorm
-        #self.m = nn.ModuleList(
-        #    nn.Sequential(
-        #        nn.Conv2d(x, x, 3, padding=1),
-        #        nn.BatchNorm2d(x),
-        #        nn.ReLU(),
-        #        nn.Conv2d(x, self.na * 2, 1)  # output = sin, cos
-        #    )
-        #    for x in ch
-        #)
-
         def heading_block(in_ch, out_ch):
             mid_ch = in_ch // 2
             return nn.Sequential(

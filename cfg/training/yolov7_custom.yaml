@@ -3,11 +3,16 @@ nc: 1  # number of classes
 depth_multiple: 1.0  # model depth multiple
 width_multiple: 1.0  # layer channel multiple
 
-# anchors
+# BOArDING 3
 anchors:
-  - [14,6,  9,16,  23,11,]  # P3/8
-  - [39,16,  25,39,  67,27]  # P4/16
-  - [76,89,  157,55,  160,285]  # P5/32
+   - [10,6,  20,8,  11,20]
+   - [32,14,  27,39,  62,23]
+   - [103,55,  222,109,  162,298]
+
+#anchors:
+#  - [14,6,  9,16,  23,11,]  # P3/8
+#  - [39,16,  25,39,  67,27]  # P4/16
+#  - [76,89,  157,55,  160,285]  # P5/32
 
 # yolov7 backbone
 backbone:
@@ -134,12 +139,32 @@ head:
    
    [75, 1, RepConv, [256, 3, 1]],
    [88, 1, RepConv, [512, 3, 1]],
+   [101, 1, RepConv, [1024, 3, 1]], # 104
+
+   [75, 1, RepConv, [256, 3, 1]],
+   [-1, 1, Conv, [256, 3, 1]],
+   [-1, 1, Conv, [256, 3, 1]],
+   [88, 1, RepConv, [512, 3, 1]],
+   [-1, 1, Conv, [512, 3, 1]],
+   [-1, 1, Conv, [512, 3, 1]],
    [101, 1, RepConv, [1024, 3, 1]],
+   [-1, 1, Conv, [1024, 3, 1]],
+   [-1, 1, Conv, [1024, 3, 1]], # 113
+
+   [ 75, 1, RepConv, [ 256, 3, 1 ] ],
+   [ -1, 1, Conv, [ 256, 3, 1 ] ],
+   [ -1, 1, Conv, [ 256, 3, 1 ] ],
+   [ 88, 1, RepConv, [ 512, 3, 1 ] ],
+   [ -1, 1, Conv, [ 512, 3, 1 ] ],
+   [ -1, 1, Conv, [ 512, 3, 1 ] ],
+   [ 101, 1, RepConv, [ 1024, 3, 1 ] ],
+   [ -1, 1, Conv, [ 1024, 3, 1 ] ],
+   [ -1, 1, Conv, [ 1024, 3, 1 ] ], # 112
 
    # Detection head
    [[102,103,104], 1, IDetect, [nc, anchors]],   # Detect(P3, P4, P5)
    # Distance head
-   [[102,103,104], 1, IDistance, [anchors]],
+   [[107,110,113], 1, IDistance, [anchors]],
    # Heading head (sin, cos)
-   [[102,103,104], 1, IHeading, [anchors]],
+   [[116,119,122], 1, IHeading, [anchors]],
   ]
