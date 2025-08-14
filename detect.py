@@ -15,36 +15,6 @@ from utils.general import check_img_size, check_requirements, check_imshow, non_
 from utils.plots import plot_one_box
 from utils.torch_utils import select_device, load_classifier, time_synchronized, TracedModel
 
-def get_color_based_on_distance(distance):
-    if distance <= 50:
-        return (0, 0, 255)  # Red in BGR
-    elif 50 < distance <= 150:
-        return (0, 165, 255)  # Orange in BGR
-    elif 150 < distance <= 300:
-        return (0, 250, 250)  # Yellow in BGR
-    else:
-        return (255, 0, 0)  # Blue in BGR
-
-
-def get_class_color_with_distance(cls_name, distance):
-    # Basisfarben in BGR
-    base_colors = {
-        'boat': (0, 100, 0),     # dark green
-        'buoy': (0, 0, 100),     # dark red
-    }
-    base_color = base_colors.get(cls_name, (50, 50, 50))
-    # brightness factor based on distance
-    if distance <= 50:
-        factor = 1.0  # dark
-    elif distance <= 150:
-        factor = 1.5
-    elif distance <= 300:
-        factor = 2.0
-    else:
-        factor = 2.5  # bright
-    scaled_color = tuple(int(min(c * factor, 255)) for c in base_color)
-    return scaled_color
-
 
 def detect(save_img=False):
     source, weights, view_img, save_txt, imgsz, trace = opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size, not opt.no_trace
@@ -144,12 +114,12 @@ def detect(save_img=False):
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
 
                 # Print results
-                for c in det[:, -4].unique():
-                    n = (det[:, -4] == c).sum()  # detections per class
+                for c in det[:, -3].unique():
+                    n = (det[:, -3] == c).sum()  # detections per class
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
                 # Write results
-                for *xyxy, conf, cls, distance, cosh, sinh in reversed(det):
+                for *xyxy, conf, cls, cosh, sinh in reversed(det):
                     heading_rad = torch.arctan2(sinh, cosh)  # in radians [-π, π]
                     heading_deg = torch.rad2deg(heading_rad) % 360  # wrap to [0, 360)
                     heading = heading_deg
@@ -157,21 +127,15 @@ def detect(save_img=False):
                         heading = None
                     if save_txt:  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                        line = (cls, *xywh, conf, distance, cosh, sinh, heading) if opt.save_conf else (cls, *xywh, distance, cosh, sinh, heading)  # label format
+                        line = (cls, *xywh, conf, cosh, sinh, heading) if opt.save_conf else (cls, *xywh, distance, cosh, sinh, heading)  # label format
                         with open(txt_path + '.txt', 'a') as f:
                             f.write(('%g ' * len(line)).rstrip() % line + '\n')
 
                     if save_img or view_img:  # Add bbox to image
-                        # label = f'{names[int(cls)]} {conf:.2f} {max(0,min(distance*1000,1000)):.2f}'
-                        # label = f'{names[int(cls)]} {conf:.2f} {max(0,min(distance,1000)):.1f}'
                         # I believe clipping is taken care of in inference yolo, distance
-                        label = f'{names[int(cls)]} {conf:.2f} {distance:.1f} {heading:.1f}' if heading else f'{names[int(cls)]} {conf:.2f} {distance:.1f}'
-                        color = get_class_color_with_distance(names[int(cls)], distance)
-                        # plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
-                        if color == (0, 250, 250) or distance > 300:
-                            txtcolor = [0, 0, 0]
-                        else:
-                            txtcolor = [255,255,255]
+                        label = f'{names[int(cls)]} {conf:.2f} {heading:.1f}' if heading else f'{names[int(cls)]} {conf:.2f} {distance:.1f}'
+                        color = 'red'
+                        txtcolor = [255,255,255]
                         plot_one_box(xyxy, im0, label=label, color=color, line_thickness=1, textcolor=txtcolor, heading=heading)
 
             # Print time (inference + NMS)

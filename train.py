@@ -202,11 +202,6 @@ def train(hyp, opt, device, tb_writer=None):
     # Resume
     start_epoch, best_fitness = 0, 0.0
     if pretrained:
-        # Optimizer
-        # if ckpt['optimizer'] is not None:
-        #     optimizer.load_state_dict(ckpt['optimizer'])
-        #     best_fitness = ckpt['best_fitness']
-
         # EMA
         try:
             if ema and ckpt.get('ema'):
@@ -252,7 +247,6 @@ def train(hyp, opt, device, tb_writer=None):
                                             image_weights=opt.image_weights, quad=opt.quad, prefix=colorstr('train: '))
     mlc = np.concatenate(dataset.labels, 0)[:, 0].max()  # max label class
     nb = len(dataloader)  # number of batches
-    #print(dataset.labels)
     assert mlc < nc, 'Label class %g exceeds nc=%g in %s. Possible class labels are 0-%g' % (mlc, nc, opt.data, nc - 1)
 
     # Process 0
@@ -313,7 +307,6 @@ def train(hyp, opt, device, tb_writer=None):
     early_stop_patience = opt.early_stopping
     early_stop_counter = 0
 
-
     for epoch in range(start_epoch, epochs):  # epoch ------------------------------------------------------------------
         model.train()
 
@@ -335,11 +328,11 @@ def train(hyp, opt, device, tb_writer=None):
         # b = int(random.uniform(0.25 * imgsz, 0.75 * imgsz + gs) // gs * gs)
         # dataset.mosaic_border = [b - imgsz, -b]  # height, width borders
 
-        mloss = torch.zeros(6, device=device)  # mean losses
+        mloss = torch.zeros(5, device=device)  # mean losses
         if rank != -1:
             dataloader.sampler.set_epoch(epoch)
         pbar = enumerate(dataloader)
-        logger.info(('\n' + '%10s' * 10) % ('Epoch', 'gpu_mem', 'box', 'obj', 'cls', 'dist', 'heading', 'total', 'labels', 'img_size'))
+        logger.info(('\n' + '%9s' * 9) % ('Epoch', 'gpu_mem', 'box', 'obj', 'cls', 'heading', 'total', 'labels', 'img_size'))
         if rank in [-1, 0]:
             pbar = tqdm(pbar, total=nb)  # progress bar
         optimizer.zero_grad()
@@ -394,7 +387,7 @@ def train(hyp, opt, device, tb_writer=None):
                 mloss = (mloss * i + loss_items) / (i + 1)  # update mean losses
                 mloss = torch.round(mloss * 1e5) / 1e5
                 mem = '%.3gG' % (torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0)  # (GB)
-                s = ('%10s' * 2 + '%10.5g' * 8) % (
+                s = ('%10s' * 2 + '%10.5g' * 7) % (
                     '%g/%g' % (epoch, epochs - 1), mem, *mloss, targets.shape[0], imgs.shape[-1])
                 pbar.set_description(s)
 
@@ -446,11 +439,11 @@ def train(hyp, opt, device, tb_writer=None):
                 os.system('gsutil cp %s gs://%s/results/results%s.txt' % (results_file, opt.bucket, opt.name))
 
             # Log
-            tags = ['train/box_loss', 'train/obj_loss', 'train/cls_loss', 'train/dist_loss', 'train/head_loss', # train loss
+            tags = ['train/box_loss', 'train/obj_loss', 'train/cls_loss', 'train/head_loss', # train loss
                     'metrics/precision', 'metrics/recall', 'metrics/mAP_0.5', 'metrics/mAP_0.5:0.95',
-                    'val/box_loss', 'val/obj_loss', 'val/cls_loss', 'val/dist_loss', 'val/head_loss',  # val loss
+                    'val/box_loss', 'val/obj_loss', 'val/cls_loss', 'val/head_loss',  # val loss
                     'x/lr0', 'x/lr1', 'x/lr2']  # params
-            print("mloss: [lbox, lobj, lcls, ldist, lhead, loss]")
+            print("mloss: [lbox, lobj, lcls, lhead, loss]")
             #print(f"\nmloss:{mloss}\nresults: {results}\nlr: {lr}\n")
             for x, tag in zip(list(mloss[:-1]) + list(results[:4]) + list(results[6:]) + lr, tags):
                 if tb_writer:
@@ -460,7 +453,7 @@ def train(hyp, opt, device, tb_writer=None):
                     #print(f"{tag}: {x}")
 
             # Update best mAP
-            fi = fitness(np.array(results).reshape(1, -1))  # weighted combination of [P, R, mAP@.5, mAP@.5-.95, distance error, combined metric]
+            fi = fitness(np.array(results).reshape(1, -1))  # weighted combination of [P, R, mAP@.5, mAP@.5-.95, combined metric]
             if fi > best_fitness:
                 best_fitness = fi
                 # reset early stopping because better fitness

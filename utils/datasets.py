@@ -494,36 +494,25 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                     nf += 1  # label found
                     with open(lb_file, 'r') as f:
                         l = [x.split() for x in f.read().strip().splitlines()]
-                        # l[-1] = l[-1]/2000
-                        # if len(l)>0:
-                            #scaling distances to in between 0 and 1 where 2km is 1.
-                            # l = [x[:-1] + [str(min(1,float(x[-1])/2000.0))] for x in l]
-                            # l = [x[:-1] + [x[-1]] for x in l]
-                        #     l = [x + [str(31.4)] for x in l]
-                        #     print(l)
-                        # print("WARNING DUMMY DISTANCES ONLY")
-
-                        # l.append(0)
                         if any([len(x) > 8 for x in l]):  # is segment
                             classes = np.array([x[0] for x in l], dtype=np.float32)
                             segments = [np.array(x[1:], dtype=np.float32).reshape(-1, 2) for x in l]  # (cls, xy1...)
                             l = np.concatenate((classes.reshape(-1, 1), segments2boxes(segments)), 1)  # (cls, xywh)
                         l = np.array(l, dtype=np.float32)
-
                     if len(l):
-                        assert l.shape[1] == 8, 'labels require 7 columns each (5 plus one for distances and 2 for heading)'
+                        assert l.shape[1] == 7, 'labels require 7 columns each (5 plus 2 for heading)'
                         # uncomment if all negative labels should be thrown away
                         # currently: distance can be negative but loss won't be computed, sin/cos can be negative
                         #assert (l >= 0).all(), 'negative labels'
-                        assert (l[:, 1:-3] >= 0).all(), 'negative bbox/label values'
-                        assert (l[:, 1:-3] <= 1).all(), 'non-normalized or out of bounds coordinate labels'
+                        assert (l[:, 1:-2] >= 0).all(), 'negative bbox/label values'
+                        assert (l[:, 1:-2] <= 1).all(), 'non-normalized or out of bounds coordinate labels'
                         assert np.unique(l, axis=0).shape[0] == l.shape[0], 'duplicate labels'
                     else:
                         ne += 1  # label empty
-                        l = np.zeros((0, 8), dtype=np.float32)
+                        l = np.zeros((0, 7), dtype=np.float32)
                 else:
                     nm += 1  # label missing
-                    l = np.zeros((0, 8), dtype=np.float32)
+                    l = np.zeros((0, 7), dtype=np.float32)
                 x[im_file] = [l, shape, segments]
             except Exception as e:
                 nc += 1
@@ -589,13 +578,10 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
 
             labels = self.labels[index].copy()
             if labels.size:  # normalized xywh to pixel xyxy format
-                labels[:, 1:-3] = xywhn2xyxy(labels[:, 1:-3], ratio[0] * w, ratio[1] * h, padw=pad[0], padh=pad[1])
-
+                labels[:, 1:-2] = xywhn2xyxy(labels[:, 1:-2], ratio[0] * w, ratio[1] * h, padw=pad[0], padh=pad[1])
         if self.augment:
-            # print("Warning commented out random perspective augmentation")
             # Augment imagespace
             if not mosaic:
-                # img, labels = random_perspective(img, labels[:,:-1],
                 img, labels = random_perspective(img, labels,
                                                  degrees=hyp['degrees'],
                                                  translate=hyp['translate'],
@@ -630,28 +616,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             labels[:, 1:5] = xyxy2xywh(labels[:, 1:5])  # convert xyxy to xywh
             labels[:, [2, 4]] /= img.shape[0]  # normalized height 0-1
             labels[:, [1, 3]] /= img.shape[1]  # normalized width 0-1
-            # if not self.prefix in ['val','test']:
             if self.traintestval == 'train':
-                max_distance = hyp["max_distance"]
-
-                # only normalize values that are not -1 to be able to filter out missing values later
-                valid_mask_d = labels[:, -3] != -1
-
-                # normalize distances based on strategy
-                labels[valid_mask_d, -3] = np.clip(labels[valid_mask_d, -3], 0, max_distance)
-                if hyp["normalization_strategy"] == 'log':
-                    labels[valid_mask_d, -3] = np.log(labels[valid_mask_d, -3] + 1)
-                    labels[valid_mask_d, -3] /= np.log(max_distance)
-                elif hyp["normalization_strategy"] == 'log_negative':
-                    labels[valid_mask_d, -3] = np.log(labels[valid_mask_d, -3] + 1)
-                    labels[valid_mask_d, -3] = labels[valid_mask_d, -3] / np.log(max_distance) - 0.5
-                elif hyp["normalization_strategy"] == 'linear':
-                    labels[valid_mask_d, -3] /= max_distance
-                elif hyp["normalization_strategy"] == 'linear_negative':
-                    labels[valid_mask_d, -3] = labels[valid_mask_d, -3] / max_distance - 0.5
-                else:
-                    raise ValueError("no normalization strategy defined")
-
                 # invalid heading values: if cos=0 and sin=0
                 cos_sin = labels[:, -2:]
                 # normalize sin/cos heading to unit circle
@@ -661,7 +626,6 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                 norms_valid = norms[valid_mask_h][:, np.newaxis]
                 cos_sin_normalized = cos_sin_valid / norms_valid
                 labels[valid_mask_h, -2:] = np.round(cos_sin_normalized, 2)
-
 
         if self.augment:
             # flip up-down
@@ -676,8 +640,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                 if nL:
                     labels[:, 1] = 1 - labels[:, 1]
 
-        labels_out = torch.zeros((nL, 9))
-        # print("labels shape ", labels.shape)
+        labels_out = torch.zeros((nL, 8))
         if nL:
             labels_out[:, 1:] = torch.from_numpy(labels)
 

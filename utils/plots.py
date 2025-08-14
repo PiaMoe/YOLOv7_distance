@@ -123,11 +123,11 @@ def plot_wh_methods():  # from utils.plots import *; plot_wh_methods()
 
 
 def output_to_target(output):
-    # Convert model output to target format [batch_id, class_id, x, y, w, h, conf, dist, cosh, sinh]
+    # Convert model output to target format [batch_id, class_id, x, y, w, h, conf, cosh, sinh]
     targets = []
     for i, o in enumerate(output):
-        for *box, conf, cls, dist, cosh, sinh in o.cpu().numpy():
-            targets.append([i, cls, *list(*xyxy2xywh(np.array(box)[None])), conf, dist, cosh, sinh])
+        for *box, conf, cls, cosh, sinh in o.cpu().numpy():
+            targets.append([i, cls, *list(*xyxy2xywh(np.array(box)[None])), conf, cosh, sinh])
     return np.array(targets)
 
 
@@ -173,10 +173,9 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
             image_targets = targets[targets[:, 0] == i]
             boxes = xywh2xyxy(image_targets[:, 2:6]).T
             classes = image_targets[:, 1].astype('int')
-            distances = image_targets[:, -3]
             cosines = image_targets[:, -2]
             sines = image_targets[:, -1]
-            labels = image_targets.shape[1] == 6+3  # labels if no conf column (+3 bc of distance & heading)
+            labels = image_targets.shape[1] == 6+2  # labels if no conf column (+2 bc of heading)
             conf = None if labels else image_targets[:, 6]  # check for confidence presence (label vs pred)
 
             if boxes.shape[1]:
@@ -189,7 +188,6 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
             boxes[[1, 3]] += block_y
             for j, box in enumerate(boxes.T):
                 cls = int(classes[j])
-                dist = distances[j]
                 cosh = cosines[j]
                 sinh = sines[j]
                 heading_rad = np.arctan2(sinh, cosh)  # in radians [-π, π]
@@ -208,7 +206,7 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
                 # no class name but number
                 #cls = names[cls] if names else cls
                 if labels or conf[j] > 0.25:  # 0.25 conf thresh
-                    label = '%i %.1f %.1f' % (cls, dist, heading) if labels else '%i %.1f %.1f %.1f' % (cls, conf[j], dist, heading)
+                    label = '%i %.1f' % (cls, heading) if labels else '%i %.1f %.1f' % (cls, conf[j], heading)
                     plot_one_box(box, mosaic, label=label, color=color, line_thickness=tl)
 
         # Draw image filename labels
@@ -438,10 +436,10 @@ def plot_results_overlay(start=0, stop=0):  # from utils.plots import *; plot_re
 
 def plot_results(start=0, stop=0, bucket='', id=(), labels=(), save_dir='', results_dir=''):
     # Plot training 'results*.txt'. from utils.plots import *; plot_results(save_dir='runs/train/exp')
-    fig, ax = plt.subplots(3, 4, figsize=(10, 8), tight_layout=True)
+    fig, ax = plt.subplots(2, 5, figsize=(10, 6), tight_layout=True)
     ax = ax.ravel()
-    s = ['Box', 'Objectness', 'Distance', 'Heading', 'Precision', 'Recall', 'mAP@0.5', 'mAP@0.5:0.95',
-         'val Box', 'val Objectness', 'val Distance', 'val Heading']
+    s = ['Box', 'Objectness', 'Heading', 'Precision', 'Recall', 'mAP@0.5', 'mAP@0.5:0.95',
+         'val Box', 'val Objectness', 'val Heading']
     if results_dir:
         files = [Path(results_dir)]
     elif bucket:
@@ -454,10 +452,10 @@ def plot_results(start=0, stop=0, bucket='', id=(), labels=(), save_dir='', resu
     assert len(files), 'No results.txt files found in %s, nothing to plot.' % os.path.abspath(save_dir)
     for fi, f in enumerate(files):
         try:
-            results = np.loadtxt(f, usecols=[2, 3, 5, 6, 10, 11, 12, 13, 16, 17, 19, 20], ndmin=2).T
+            results = np.loadtxt(f, usecols=[2, 3, 5, 9, 10, 11, 12, 14, 15, 16, 17], ndmin=2).T
             n = results.shape[1]  # number of rows
             x = range(start, min(stop, n) if stop else n)
-            for i in range(12):
+            for i in range(10):
                 y = results[i, x]
                 if i in [0, 1, 2, 5, 6, 7]:
                     y[y == 0] = np.nan  # don't show zero loss values
@@ -529,22 +527,6 @@ def plot_skeleton_kpts(im, kpts, steps, orig_shape=None):
             continue
         cv2.line(im, pos1, pos2, (int(r), int(g), int(b)), thickness=2)
 
-
-def plot_dist_err(err_results, num_samples = None, labelX = 'GT - Distance [m]', labelY = r'$\varepsilon$', path='err_plot.png', color='blue'):
-    fig, ax = plt.subplots()
-    x = [(x[0] + x[1])/2 for x in err_results]
-    y = list(err_results.values())
-    bars = ax.bar(x, y, width = 30, color=color)
-    # Annotate each bar with the corresponding sample count
-    if num_samples is not None:
-        for bar, key in zip(bars, num_samples):
-            yval = bar.get_height()  # Get the height of the bar
-            plt.text(bar.get_x() + bar.get_width() / 2, yval, num_samples[key], ha='center', va='bottom')
-
-    ax.set_ylabel(labelY)
-    ax.set_xlabel(labelX)
-    plt.savefig(path)
-
 def plot_errors(errors, bins, max_dist, path):
     # group errors into bins
     delta = max_dist/(2*bins)
@@ -607,21 +589,6 @@ def plot_dist_pred(data, path):
     ax.set_ylabel("Prediction [m]")
     ax.set_xlabel("Ground Truth Distance [m]")
     plt.savefig(path)
-
-def plot_dist_err_per_class(data, path):
-    class_ids = sorted(data.keys())
-    errors = [data[cid] for cid in class_ids]
-
-    plt.figure(figsize=(6, 4))
-    plt.bar(class_ids, errors, color='skyblue')
-    plt.xlabel("Klasse")
-    plt.ylabel("Mittlerer Distanzfehler (Meter)")
-    plt.title("Absoluter Distanzfehler pro Klasse")
-    plt.xticks(class_ids)  # Setze die Klassen-ID als X-Achsen-Ticks
-    plt.grid(axis='y', linestyle='--', alpha=0.7)
-    plt.tight_layout()
-    plt.savefig(path)
-
 
 def plot_heading_pred(data, path):
     fig, ax = plt.subplots()
