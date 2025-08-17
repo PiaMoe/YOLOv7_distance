@@ -387,8 +387,6 @@ def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False, eps=
         return iou  # IoU
 
 
-
-
 def bbox_alpha_iou(box1, box2, x1y1x2y2=False, GIoU=False, DIoU=False, CIoU=False, alpha=2, eps=1e-9):
     # Returns tsqrt_he IoU of box1 to box2. box1 is 4, box2 is nx4
     box2 = box2.T
@@ -414,7 +412,7 @@ def bbox_alpha_iou(box1, box2, x1y1x2y2=False, GIoU=False, DIoU=False, CIoU=Fals
 
     # change iou into pow(iou+eps)
     # iou = inter / union
-    iou = torch.pow(inter/union + eps, alpha)
+    iou = torch.pow(inter / union + eps, alpha)
     # beta = 2 * alpha
     if GIoU or DIoU or CIoU:
         cw = torch.max(b1_x2, b2_x2) - torch.min(b1_x1, b2_x1)  # convex (smallest enclosing box) width
@@ -435,10 +433,10 @@ def bbox_alpha_iou(box1, box2, x1y1x2y2=False, GIoU=False, DIoU=False, CIoU=Fals
         else:  # GIoU https://arxiv.org/pdf/1902.09630.pdf
             # c_area = cw * ch + eps  # convex area
             # return iou - (c_area - union) / c_area  # GIoU
-            c_area = torch.max(cw * ch + eps, union) # convex area
+            c_area = torch.max(cw * ch + eps, union)  # convex area
             return iou - torch.pow((c_area - union) / c_area + eps, alpha)  # GIoU
     else:
-        return iou # torch.log(iou+eps) or iou
+        return iou  # torch.log(iou+eps) or iou
 
 
 def box_iou(box1, box2):
@@ -493,7 +491,7 @@ def box_giou(box1, box2):
 
     area1 = box_area(box1.T)
     area2 = box_area(box2.T)
-    
+
     inter = (torch.min(box1[:, None, 2:], box2[:, 2:]) - torch.max(box1[:, None, :2], box2[:, :2])).clamp(0).prod(2)
     union = (area1[:, None] + area2 - inter)
 
@@ -528,7 +526,7 @@ def box_ciou(box1, box2, eps: float = 1e-7):
 
     area1 = box_area(box1.T)
     area2 = box_area(box2.T)
-    
+
     inter = (torch.min(box1[:, None, 2:], box2[:, 2:]) - torch.max(box1[:, None, :2], box2[:, :2])).clamp(0).prod(2)
     union = (area1[:, None] + area2 - inter)
 
@@ -580,7 +578,7 @@ def box_diou(box1, box2, eps: float = 1e-7):
 
     area1 = box_area(box1.T)
     area2 = box_area(box2.T)
-    
+
     inter = (torch.min(box1[:, None, 2:], box2[:, 2:]) - torch.max(box1[:, None, :2], box2[:, :2])).clamp(0).prod(2)
     union = (area1[:, None] + area2 - inter)
 
@@ -613,7 +611,7 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
          list of detections, on (n,6) tensor per image [xyxy, conf, cls]
     """
 
-    nc = prediction.shape[2] - 8  # number of classes bc of distance and heading 8 instead of 5
+    nc = prediction.shape[2] - 7  # number of classes bc of heading 7 instead of 5
     xc = prediction[..., 4] > conf_thres  # candidates
 
     # Settings
@@ -626,7 +624,7 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
     merge = False  # use merge-NMS
 
     t = time.time()
-    output = [torch.zeros((0, 9), device=prediction.device)] * prediction.shape[0]
+    output = [torch.zeros((0, 8), device=prediction.device)] * prediction.shape[0]
     for xi, x in enumerate(prediction):  # image index, image inference
         # Apply constraints
         # x[((x[..., 2:4] < min_wh) | (x[..., 2:4] > max_wh)).any(1), 4] = 0  # width-height
@@ -635,7 +633,7 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
         # Cat apriori labels if autolabelling
         if labels and len(labels[xi]):
             l = labels[xi]
-            v = torch.zeros((len(l), nc + 8), device=x.device)
+            v = torch.zeros((len(l), nc + 7), device=x.device)
             v[:, :4] = l[:, 1:5]  # box
             v[:, 4] = 1.0  # conf
             v[range(len(l)), l[:, 0].long() + 5] = 1.0  # cls
@@ -647,21 +645,22 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
 
         # Compute conf
         if nc == 1:
-            x[:, 5:-3] = x[:, 4:5] # for models with one class, cls_loss is 0 and cls_conf is always 0.5,
-                                 # so there is no need to multiplicate.
+            x[:, 5:-2] = x[:, 4:5]  # for models with one class, cls_loss is 0 and cls_conf is always 0.5,
+            # so there is no need to multiplicate.
         else:
-            x[:, 5:-3] *= x[:, 4:5]  # conf = obj_conf * cls_conf
+            x[:, 5:-2] *= x[:, 4:5]  # conf = obj_conf * cls_conf
 
         # Box (center x, center y, width, height) to (x1, y1, x2, y2)
         box = xywh2xyxy(x[:, :4])
 
-        # Detections matrix nx6 (xyxy, conf, cls, distance, heading)
+        # Detections matrix nx6 (xyxy, conf, cls, heading)
         if multi_label:
-            i, j = (x[:, 5:-3] > conf_thres).nonzero(as_tuple=False).T
-            x = torch.cat((box[i], x[i, j + 5, None], j[:, None].float(), x[i, -3, None]), 1)
+            print("MULTI LABEL")
+            i, j = (x[:, 5:-2] > conf_thres).nonzero(as_tuple=False).T
+            x = torch.cat((box[i], x[i, j + 5, None], j[:, None].float()), 1)
         else:  # best class only
-            conf, j = x[:, 5:-3].max(1, keepdim=True)
-            x = torch.cat((box, conf, j.float(), x[:,-3:]), 1)[conf.view(-1) > conf_thres]
+            conf, j = x[:, 5:-2].max(1, keepdim=True)
+            x = torch.cat((box, conf, j.float(), x[:, -2:]), 1)[conf.view(-1) > conf_thres]
 
         # Filter by class
         if classes is not None:
@@ -700,15 +699,16 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
     return output
 
 
-def non_max_suppression_kpt(prediction, conf_thres=0.25, iou_thres=0.45, classes=None, agnostic=False, multi_label=False,
-                        labels=(), kpt_label=False, nc=None, nkpt=None):
+def non_max_suppression_kpt(prediction, conf_thres=0.25, iou_thres=0.45, classes=None, agnostic=False,
+                            multi_label=False,
+                            labels=(), kpt_label=False, nc=None, nkpt=None):
     """Runs Non-Maximum Suppression (NMS) on inference results
 
     Returns:
          list of detections, on (n,6) tensor per image [xyxy, conf, cls]
     """
     if nc is None:
-        nc = prediction.shape[2] - 5  if not kpt_label else prediction.shape[2] - 56 # number of classes
+        nc = prediction.shape[2] - 5 if not kpt_label else prediction.shape[2] - 56  # number of classes
     xc = prediction[..., 4] > conf_thres  # candidates
 
     # Settings
@@ -721,7 +721,7 @@ def non_max_suppression_kpt(prediction, conf_thres=0.25, iou_thres=0.45, classes
     merge = False  # use merge-NMS
 
     t = time.time()
-    output = [torch.zeros((0,6), device=prediction.device)] * prediction.shape[0]
+    output = [torch.zeros((0, 6), device=prediction.device)] * prediction.shape[0]
     for xi, x in enumerate(prediction):  # image index, image inference
         # Apply constraints
         # x[((x[..., 2:4] < min_wh) | (x[..., 2:4] > max_wh)).any(1), 4] = 0  # width-height
@@ -741,7 +741,7 @@ def non_max_suppression_kpt(prediction, conf_thres=0.25, iou_thres=0.45, classes
             continue
 
         # Compute conf
-        x[:, 5:5+nc] *= x[:, 4:5]  # conf = obj_conf * cls_conf
+        x[:, 5:5 + nc] *= x[:, 4:5]  # conf = obj_conf * cls_conf
 
         # Box (center x, center y, width, height) to (x1, y1, x2, y2)
         box = xywh2xyxy(x[:, :4])
@@ -758,7 +758,6 @@ def non_max_suppression_kpt(prediction, conf_thres=0.25, iou_thres=0.45, classes
                 kpts = x[:, 6:]
                 conf, j = x[:, 5:6].max(1, keepdim=True)
                 x = torch.cat((box, conf, j.float(), kpts), 1)[conf.view(-1) > conf_thres]
-
 
         # Filter by class
         if classes is not None:
