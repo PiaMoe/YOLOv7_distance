@@ -166,7 +166,7 @@ def detect(save_img=False):
                         # label = f'{names[int(cls)]} {conf:.2f} {max(0,min(distance,1000)):.1f}'
                         # I believe clipping is taken care of in inference yolo, distance
                         label = f'{names[int(cls)]} {conf:.2f} {distance:.1f} {heading:.1f}' if heading else f'{names[int(cls)]} {conf:.2f} {distance:.1f}'
-                        color = get_class_color_with_distance(names[int(cls)], distance)
+                        color = get_color_based_on_distance(distance)
                         # plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
                         if color == (0, 250, 250) or distance > 300:
                             txtcolor = [0, 0, 0]
