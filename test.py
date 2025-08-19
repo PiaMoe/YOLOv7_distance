@@ -161,6 +161,8 @@ def test(data,
     head_errors = []
     head_errors_plot = []
     head_pred_and_gt = []
+    correct_headings = 0
+    incorrect_headings = 0
 
     for batch_i, (img, targets, paths, shapes) in enumerate(tqdm(dataloader, desc=s)):
         img = img.to(device, non_blocking=True)
@@ -341,6 +343,11 @@ def test(data,
                                 target_head = float(target_head.cpu())
                                 pred_head = float(pred_head.cpu())
                                 heading_error = min(abs(pred_head - target_head), 360 - abs(pred_head - target_head))
+                                # viewpoint precision
+                                if heading_error < 30:
+                                    correct_headings += 1
+                                else:
+                                    incorrect_headings += 1
                                 head_pred_and_gt.append([target_head, pred_head])
                                 head_errors_plot.append([target_head, heading_error])
                                 head_conf_and_error_and_gt = [float(pred_conf), heading_error, target_head, pred_head]
@@ -456,6 +463,8 @@ def test(data,
     mean_heading_error = total_head_error / count if count > 0 else 0.0
     mean_heading_error_normalized = mean_heading_error / 180
 
+    heading_precision = correct_headings / (correct_headings + incorrect_headings) if (correct_headings + incorrect_headings) > 0 else 0.0
+
     # combined metric between mAP@0.5:0.95, err_weighted_dist_rel and mean_heading_error
     combined_metric_with_head = map * (1 - min(overall_weighted_mean_dist_err_boat, 1)) * (1 - mean_heading_error_normalized)
 
@@ -482,7 +491,8 @@ def test(data,
     for cls_id in sorted(dist_class_errs.keys()):
         print(f"  Class {cls_id}: {dist_class_errs[cls_id]:.3f} m")
     print(f"\nMean heading error = {mean_heading_error:.1f} degrees")
-    print("Combined Metric (MAP & distance) = ", combined_metric)
+    print(f"Heading precision = {heading_precision:.3f}")
+    print("\nCombined Metric (MAP & distance) = ", combined_metric)
     print("Combined_metric (MAP, distance & heading) = ", combined_metric_with_head)
     metrics_overall_distance = {}
     metrics_overall_distance["metrics/weighted_rel_dist_err_boat"] = overall_weighted_mean_dist_err_boat
@@ -510,6 +520,33 @@ def test(data,
     t = tuple(x / seen * 1E3 for x in (t0, t1, t0 + t1)) + (imgsz, imgsz, batch_size)  # tuple
     if not training:
         print('Speed: %.1f/%.1f/%.1f ms inference/NMS/total per %gx%g image at batch-size %g' % t)
+
+    # save results that are not in plots
+    print("exists =", save_dir.exists())
+    with open(save_dir / 'results.txt', 'w') as f:
+        f.write(f"classes | seen = preds | nt = GT | mp = precision | mr = recall | mAP50 | mAP50-95\n")
+        f.write(pf % ('all', seen, nt.sum(), mp, mr, map50, map) + '\n')
+        if (verbose or (nc < 50 and not training)) and nc > 1 and len(stats):
+            for i, c in enumerate(ap_class):
+                f.write(pf % (names[c], seen, nt[c], p[i], r[i], ap50[i], ap[i]) + '\n')
+        f.write(f"\nTotal Samples: {samples}\n")
+        f.write(f"Overall weighted_rel_dist_err_boat = {overall_weighted_mean_dist_err_boat}\n")
+        f.write(f"\nOverall abs_mean_dist_err_boat = {mean_abs_dist_err_boat}\n")
+        f.write("Absolute Distance Error per Class:\n")
+        for cls_id in sorted(dist_class_errs.keys()):
+            f.write(f"  Class {cls_id}: {dist_class_errs[cls_id]:.3f} m\n")
+        if mean_abs_dist_err_boat_comp:
+            f.write("\nDistance bins:\n")
+            for bin_key in mean_abs_dist_err_boat_comp:
+                f.write(f"  Distance bin {bin_key}:\n")
+                f.write(f"    samples: {mean_abs_dist_err_boat_comp[bin_key]['n']}\n")
+                f.write(f"    weighted_reL_dist_err_boat = {weighted_mean_dist_err_boat_comp[bin_key]['err']:.3f}\n")
+                f.write(f"    abs_mean_dist_err_boat = {mean_abs_dist_err_boat_comp[bin_key]['err']:.3f}\n")
+        f.write(f"\nMean heading error: {mean_heading_error:.1f} degrees\n")
+        f.write(f"Heading precision: {heading_precision:.3f}\n")
+        f.write(f"\nCombined Metric (MAP & distance): {combined_metric}\n")
+        f.write(f"Combined Metric (MAP, distance & heading): {combined_metric_with_head}\n")
+
 
     # Plots
     if plots:
@@ -584,7 +621,7 @@ def test(data,
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='test.py')
-    parser.add_argument('--weights', nargs='+', type=str, default='../runs/train/BOArDING_standard/weights/best.pt', help='model.pt path(s)')
+    parser.add_argument('--weights', nargs='+', type=str, default='../runs/train/BOArDING_cos_sin/weights/best.pt', help='model.pt path(s)')
     parser.add_argument('--data', type=str, default='data/debug_data.yaml', help='*.data path')
     parser.add_argument('--batch-size', type=int, default=4, help='size of each image batch')
     parser.add_argument('--img-size', type=int, default=1024, help='inference size (pixels)')
