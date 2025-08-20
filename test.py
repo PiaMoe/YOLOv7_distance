@@ -9,6 +9,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import yaml
+import pandas as pd
 from sympy.integrals.meijerint_doc import category
 from tqdm import tqdm
 from collections import defaultdict
@@ -17,7 +18,8 @@ from utils.datasets import create_dataloader
 from utils.general import coco80_to_coco91_class, check_dataset, check_file, check_img_size, check_requirements, \
     box_iou, non_max_suppression, scale_coords, xyxy2xywh, xywh2xyxy, set_logging, increment_path, colorstr
 from utils.metrics import ap_per_class, ConfusionMatrix
-from utils.plots import plot_images, output_to_target, plot_study_txt, plot_dist_err, plot_errors, plot_dist_pred, plot_heading_pred, plot_heading_err
+from utils.plots import (plot_images, output_to_target, plot_study_txt, plot_dist_err, plot_errors, plot_dist_pred,
+                         plot_heading_pred, plot_heading_err, correlations)
 from utils.torch_utils import select_device, time_synchronized, TracedModel
 
 
@@ -142,6 +144,7 @@ def test(data,
     head_errors = []
     head_errors_plot = []
     head_pred_and_gt = []
+    records = []
     correct_headings = 0
     incorrect_headings = 0
 
@@ -342,6 +345,13 @@ def test(data,
                                 head_conf_and_error_and_gt = [float(pred_conf), heading_error, target_head, pred_head]
                                 head_errors_per_cat[int(cls)].append(head_conf_and_error_and_gt)
 
+                                records.append({
+                                    "confidence": pred_conf,
+                                    "distance error": distance_error,
+                                    "heading error": heading_error,
+                                    "IoU": ious[j],
+                                })
+
                                 if len(detected) == nl:  # all targets already located in image
                                     break
                 distance_errors.append(distance_errors_per_cat)
@@ -456,6 +466,8 @@ def test(data,
     # combined metric between mAP@0.5:0.95, err_weighted_dist_rel and mean_heading_error
     combined_metric_with_head = map * (1 - min(overall_weighted_mean_dist_err_boat, 1)) * (1 - mean_heading_error_normalized)
 
+    # correlations
+    corr_df = pd.DataFrame(records).dropna().corr()
 
     # Print the results for each bin
     if mean_abs_dist_err_boat_comp:
@@ -529,6 +541,8 @@ def test(data,
         f.write(f"Correct headings: {correct_headings}, Incorrect headings: {incorrect_headings}\n")
         f.write(f"\nCombined Metric (MAP & distance): {combined_metric}\n")
         f.write(f"Combined Metric (MAP, distance & heading): {combined_metric_with_head}\n")
+        f.write("\nCorrelation Matrix (confidence, dist_error, heading_error):\n")
+        f.write(str(corr_df))
 
 
     # Plots
@@ -547,6 +561,9 @@ def test(data,
         # plot heading errors
         plot_heading_pred(head_pred_and_gt, path=os.path.join(save_dir, 'head_pred.pdf'))
         plot_heading_err(head_pred_and_gt, path=os.path.join(save_dir, 'head_err.pdf'))
+
+        # plot correlations
+        correlations(pd.DataFrame(records).dropna(), path=os.path.join(save_dir, 'correlations.png'))
 
 
         confusion_matrix.plot(save_dir=save_dir, names=list(names.values()))

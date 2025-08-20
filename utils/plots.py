@@ -607,8 +607,7 @@ def plot_dist_pred(data, path):
     ax.set_ylabel("Prediction [m]")
     ax.set_xlabel("Ground Truth Distance [m]")
     plt.savefig(path)
-    
-# TODO: plot heading error
+
 def plot_heading_pred(data, path):
     fig, ax = plt.subplots()
     for x in data:
@@ -666,6 +665,47 @@ def plot_heading_err(data, path):
         height = bar.get_height()
         plt.text(bar.get_x() + bar.get_width() / 2, height + 1, str(count),
                  ha='center', va='bottom', fontsize=9)
+
+    plt.tight_layout()
+    plt.savefig(path)
+
+def correlations(df, path):
+    """
+    Plots scatterplots with regression line for:
+    - confidence vs distance error
+    - confidence vs heading error
+    - distance error vs heading error
+    - confidence vs IoU
+    - distance error vs IoU
+    - heading error vs IoU
+    """
+
+    df = df.copy()
+    for col in df.columns:
+        if torch.is_tensor(df[col].iloc[0]):
+            df[col] = df[col].apply(lambda t: t.detach().cpu().item())
+
+    pairs = [
+        ("confidence", "distance error"),
+        ("confidence", "heading error"),
+        ("distance error", "heading error"),
+        ("confidence", "IoU"),
+        ("distance error", "IoU"),
+        ("heading error", "IoU")
+    ]
+
+    fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+    axes = axes.flatten()
+
+    for ax, (x, y) in zip(axes, pairs):
+        sns.regplot(
+            x=x, y=y, data=df, ax=ax,
+            scatter_kws={"marker": 'o', "alpha": 0.6, "s": 9},
+            line_kws={"color": rgb.tue_red}
+        )
+        ax.set_title(f"{x} vs {y}")
+        ax.set_xlabel(x)
+        ax.set_ylabel(y)
 
     plt.tight_layout()
     plt.savefig(path)
