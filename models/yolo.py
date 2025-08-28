@@ -228,11 +228,11 @@ class IDetect(nn.Module):
                     y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
                     y[..., -3] = self.rescale_dist(y[..., -3])  # rescale dist
                 else:
-                    xy, wh, conf, dist, cosH, sinH = y.split((2, 2, self.nc + 1 + 2, 1), 4)  # y.tensor_split((2, 4, 5), 4)  # torch 1.8.0
+                    xy, wh, conf, dist, cosH, sinH = y.split((2, 2, self.nc + 1, 1, 1, 1), 4)  # y.tensor_split((2, 4, 5), 4)  # torch 1.8.0
                     xy = xy * (2. * self.stride[i]) + (self.stride[i] * (self.grid[i] - 0.5))  # new xy
                     wh = wh ** 2 * (4 * self.anchor_grid[i].data)  # new wh
                     dist = self.rescale_dist(dist)
-                    y = torch.cat((xy, wh, conf, dist, cosH, sinH), 5)
+                    y = torch.cat((xy, wh, conf, dist, sinH, cosH), 4)
                 z.append(y.view(bs, -1, self.no))
 
         if self.training:
