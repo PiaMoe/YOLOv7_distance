@@ -22,18 +22,20 @@ class DeepStreamOutput(nn.Module):
         objectness = x[:, :, 4:5]
         class_scores = x[:, :, 5:-3]
         scores, labels = torch.max(class_scores, dim=-1, keepdim=True)
-        scores = (scores * objectness * 100).round().to(torch.int32)  # scale to 0-100
+        scores = (scores * objectness).float()
+        scores = torch.round(scores * 100) / 100  # Truncate to two decimal places
 
-        distances = x[:, :, -3].round().to(torch.int32)
+        distances = x[:, :, -3].round().to(torch.int32).unsqueeze(-1)  # (B, N, 1)
         sinp = x[:, :, -2]
         cosp = x[:, :, -1]
         heading_deg = (torch.atan2(sinp, cosp) * 180.0 / torch.pi) % 360
-        heading_deg = heading_deg.round().to(torch.int32)
+        heading_deg = heading_deg.round().to(torch.int32).unsqueeze(-1)  # (B, N, 1)
 
-        # encode into single integer: score*1e6 + distance*1e3 + heading
-        encoded_score = scores * 1_000_000 + distances * 1_000 + heading_deg
+        # encode score, distance into a single float value
+        encoded = scores + distances / 1e6 + heading_deg / 1e9
+        encoded = encoded.float()
 
-        return torch.cat([boxes, encoded_score.to(boxes.dtype), labels.to(boxes.dtype)], dim=-1)
+        return torch.cat([boxes, encoded, labels.to(boxes.dtype)], dim=-1)
 
 
 def suppress_warnings():
