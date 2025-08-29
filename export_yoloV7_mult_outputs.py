@@ -21,7 +21,7 @@ class DeepStreamOutput(nn.Module):
 
         objectness = x[:, :, 4:5]
         class_scores = x[:, :, 5:-3]
-        scores, labels = torch.max(class_scores, dim=-1, keepdim=True)
+        scores, labels = torch.max(class_scores, dim=2, keepdim=True)
         scores = (scores * objectness).float()
         scores = torch.round(scores * 100) / 100  # Truncate to two decimal places
 
