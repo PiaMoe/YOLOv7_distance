@@ -3,14 +3,8 @@ from typing import List
 
 
 def compare_models(pt_paths: List[str], atol=0.0, max_print=5):
-    """
-    Vergleicht mehrere PyTorch-Modelle hinsichtlich Architektur und Gewichten.
+    #Compares the weights of multiple PyTorch models stored in .pt files.
 
-    Args:
-        pt_paths (List[str]): Liste von Pfaden zu .pt-Dateien
-        atol (float): Absoluter Toleranzwert beim Vergleich der Gewichte (für float-Vergleich mit allclose)
-        max_print (int): Wie viele Gewichtsunterschiede/-gleichheiten sollen maximal angezeigt werden
-    """
     models = []
     for path in pt_paths:
         model = torch.load(path, map_location='cpu')
@@ -27,27 +21,26 @@ def compare_models(pt_paths: List[str], atol=0.0, max_print=5):
     non_trainable_base_keys = all_base_keys - base_trainable_keys
 
 
-    print(f"\n=== Vergleich von {len(models)} Modellen (trainierbare & nicht-trainierbare Parameter) ===")
+    print(f"\n=== Comparing {len(models)} models ===")
 
     for idx, model in enumerate(models[1:], 1):
-        print(f"\n--- Vergleich: Modell 0 <-> Modell {idx} ---")
+        print(f"\n--- model 0 vs. model {idx} ---")
         other_state = model.state_dict()
         other_trainable_keys = {k for k, v in model.named_parameters()}
         all_other_keys = set(other_state.keys())
         non_trainable_other_keys = all_other_keys - other_trainable_keys
 
-        # === Trainierbare Parameter vergleichen ===
-        print("\n📦 Trainierbare Parameter:")
+        print("\ntrainable parameters:")
         shared_keys = base_trainable_keys & other_trainable_keys
         only_in_0 = base_trainable_keys - other_trainable_keys
         only_in_1 = other_trainable_keys - base_trainable_keys
 
         if only_in_0:
-            print(f"  Nur in Modell 0:\n    {sorted(list(only_in_0))}")
+            print(f"  only in model 0:\n    {sorted(list(only_in_0))}")
         if only_in_1:
-            print(f"  Nur in Modell {idx}:\n    {sorted(list(only_in_1))}")
+            print(f"  only in model {idx}:\n    {sorted(list(only_in_1))}")
         if not only_in_0 and not only_in_1:
-            print("  ✔ Gleiche trainierbare Architektur")
+            print("Same trainable architecture")
 
         diff_keys = []
         same_keys = []
@@ -60,30 +53,30 @@ def compare_models(pt_paths: List[str], atol=0.0, max_print=5):
             else:
                 diff_keys.append(key)
 
-        print(f"  🔁 {len(diff_keys)} Parameter unterschiedlich (trainierbar)")
+        print(f"{len(diff_keys)} parameters different (trainable)")
         for k in diff_keys[:max_print]:
             print(f"    ✗ {k}")
         if len(diff_keys) > max_print:
-            print(f"    ... {len(diff_keys) - max_print} weitere Unterschiede")
+            print(f"    ... {len(diff_keys) - max_print} more differences")
 
-        print(f"  ✅ {len(same_keys)} Parameter gleich (trainierbar)")
+        print(f"{len(same_keys)} parameters equal (trainable)")
         for k in same_keys[:max_print]:
-            print(f"    ✓ {k}")
+            print(f"{k}")
         if len(same_keys) > max_print:
-            print(f"    ... {len(same_keys) - max_print} weitere Gleichheiten")
+            print(f"... {len(same_keys) - max_print} more equalities")
 
-        # === Nicht-trainierbare Parameter vergleichen ===
-        print("\n🧊 Nicht-trainierbare Parameter:")
+        # === compare not trainable parameters ===
+        print("\nnot trainable parameters:")
         shared_nontrain_keys = non_trainable_base_keys & non_trainable_other_keys
         only_in_0_nt = non_trainable_base_keys - non_trainable_other_keys
         only_in_1_nt = non_trainable_other_keys - non_trainable_base_keys
 
         if only_in_0_nt:
-            print(f"  Nur in Modell 0:\n    {sorted(list(only_in_0_nt))}")
+            print(f"only in model 0:\n    {sorted(list(only_in_0_nt))}")
         if only_in_1_nt:
-            print(f"  Nur in Modell {idx}:\n    {sorted(list(only_in_1_nt))}")
+            print(f"only in model {idx}:\n    {sorted(list(only_in_1_nt))}")
         if not only_in_0_nt and not only_in_1_nt:
-            print("  ✔ Gleiche nicht-trainierbare Architektur")
+            print("same non-trainable architecture")
 
         diff_keys_nt = []
         same_keys_nt = []
@@ -96,17 +89,17 @@ def compare_models(pt_paths: List[str], atol=0.0, max_print=5):
             else:
                 diff_keys_nt.append(key)
 
-        print(f"  🔁 {len(diff_keys_nt)} Parameter unterschiedlich (nicht-trainierbar)")
+        print(f"{len(diff_keys_nt)} parameters different (not-trainable)")
         for k in diff_keys_nt[:max_print]:
-            print(f"    ✗ {k}")
+            print(f"{k}")
         if len(diff_keys_nt) > max_print:
-            print(f"    ... {len(diff_keys_nt) - max_print} weitere Unterschiede")
+            print(f"... {len(diff_keys_nt) - max_print} more differences")
 
-        print(f"  ✅ {len(same_keys_nt)} Parameter gleich (nicht-trainierbar)")
+        print(f"{len(same_keys_nt)} parameters equal (not-trainable)")
         for k in same_keys_nt[:max_print]:
             print(f"    ✓ {k}")
         if len(same_keys_nt) > max_print:
-            print(f"    ... {len(same_keys_nt) - max_print} weitere Gleichheiten")
+            print(f" ... {len(same_keys_nt) - max_print} more equalities")
 
 
 if __name__ == "__main__":

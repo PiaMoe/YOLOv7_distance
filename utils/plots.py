@@ -195,7 +195,6 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
                 heading_rad = np.arctan2(sinh, cosh)  # in radians [-π, π]
                 heading_deg = np.degrees(heading_rad) % 360  # wrap to [0, 360)
                 heading = heading_deg
-                #TODO change in dataset.py as well if you change here and vice versa distances
                 if labels:
                     pass
                     # dist = (dist + 0.0) * np.log(1000) #changed to no negative values
@@ -660,7 +659,7 @@ def plot_heading_err(data, path):
     plt.ylabel("Mean Angular Error (deg)")
     plt.xticks(bins)
 
-    # Sample count über jedem Balken anzeigen
+    # Sample count over each bar
     for bar, count in zip(bars, sample_counts):
         height = bar.get_height()
         plt.text(bar.get_x() + bar.get_width() / 2, height + 1, str(count),

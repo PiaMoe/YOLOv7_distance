@@ -30,8 +30,6 @@ Here:
 - `cos` is the cosine of the estimated heading angle of the object.
 - `sin` is the sine of the estimated heading angle of the object.
 
-*Bild einfügen von Kreis mit Winkeln*
-
 ## Training
 Single GPU training
 ``` shell
@@ -122,10 +120,5 @@ $$\text{Combined Metric} = \text{mAP@[0.5:0.95]} \cdot (1 - \min(\epsilon_{Dist}
 
 ## Inference
 
-Use the detect script to run inference on video:
-``` shell
-python YOLOv7_distance/detect.py --weights 'YOLOv7_distance/init_weights.pt' --conf 0.25 --img-size 1024 --source '/path/to/video.avi'
-```
-*Inference Sequenz einfügen*
-
+Use the detect script to run inference on video.
 The first number is the confidence value, the second number the metric distance estimate in meters and the third number the heading angle estimate in degrees which is visualized by the arrow.

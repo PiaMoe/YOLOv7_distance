@@ -24,7 +24,6 @@ except ImportError:
 def is_main_process():
     return not dist.is_available() or not dist.is_initialized() or dist.get_rank() == 0
 
-#TODO: Distance and Heading modules
 class IDistance(nn.Module):
         stride = None
         export = False
@@ -83,7 +82,6 @@ class IDistance(nn.Module):
                 x[i] = self.im[i](x[i])
                 bs, _, ny, nx = x[i].shape
                 x[i] = x[i].view(bs, self.na, 1, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
-                # TODO: logging
                 # log model outputs
                 raw = x[i].detach().cpu()  # shape: (bs, na, ny, nx, no)
                 #if is_main_process():
@@ -168,7 +166,6 @@ class IHeading(nn.Module):
             x[i] = self.im[i](x[i])
             bs, _, ny, nx = x[i].shape
             x[i] = x[i].view(bs, self.na, 2, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
-            # TODO: logging
             # log model outputs
             raw = x[i].detach().cpu()  # shape: (bs, na, ny, nx, no)
             #if is_main_process():
