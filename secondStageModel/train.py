@@ -42,7 +42,7 @@ def evaluate(model, val_loader, device):
             total_distance_loss += distance_loss.item() * inputs.size(0)
             total_heading_loss += heading_loss.item() * inputs.size(0)
 
-            # Winkel aus cos/sin berechnen (in Grad)
+            # Angle from cos/sin
             pred_cos = outputs[:, 1].cpu().numpy()
             pred_sin = outputs[:, 2].cpu().numpy()
             target_cos = targets[:, 1].cpu().numpy()
@@ -53,12 +53,12 @@ def evaluate(model, val_loader, device):
             angle_diff = np.where(angle_diff > 180, 360 - angle_diff, angle_diff)
             angle_errors.extend(angle_diff.tolist())
 
-            # Distance denormalisieren für Fehlerberechnung
+            # denormalize distance and compute absolute error
             pred_dist = outputs[:, 0].cpu().numpy() * 1000.0
             target_dist = targets[:, 0].cpu().numpy() * 1000.0
             abs_dist_err = np.abs(pred_dist - target_dist)
             abs_distance_errors.extend(abs_dist_err.tolist())
-            # Bin Zuordnung
+            # Bin mapping
             for d, err in zip(target_dist, abs_dist_err):
                 for i in range(5):
                     if bin_edges[i] <= d < bin_edges[i+1]:
@@ -112,7 +112,7 @@ def train(train_dataset, val_dataset, epochs=20, name="custom_model"):
         for batch_idx, (inputs, targets) in enumerate(train_loader):
             inputs, targets = inputs.to(device), targets.to(device)
 
-            # Speichere Crops mit Bildnamen und Objektindex im Dateinamen
+            # save some debug crops from the first epoch
             if crops_saved < max_crops_to_save and epoch == 0:
                 os.makedirs("debug_crops", exist_ok=True)
                 batch_start = batch_idx * train_loader.batch_size

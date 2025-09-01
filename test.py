@@ -370,7 +370,6 @@ def test(data,
     mean_abs_dist_err_boat_comp = None
     weighted_mean_dist_err_boat_comp = None
 
-    # TODO: does error with confidence make sense?
     # print(distance_errors)
     for distance_err in distance_errors:
         if 0 in distance_err.keys():

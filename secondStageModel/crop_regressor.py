@@ -23,7 +23,7 @@ class CropRegressor(nn.Module):
     def forward(self, x):
         x = self.cnn(x)
         x = self.fc(x)
-        # Distance sigmoid, heading bleibt unverändert
+        # Distance sigmoid, heading is unchanged
         x[:, 0] = self.sigmoid(x[:, 0])
         return x
 
@@ -39,7 +39,7 @@ class ResNetCustomOutput(nn.Module):
         x = self.backbone(x)
         x = x.view(x.size(0), -1)
         x = self.fc(x)
-        x[:, 0] = self.sigmoid(x[:, 0])  # Distance sigmoid, heading bleibt unverändert
+        x[:, 0] = self.sigmoid(x[:, 0])
         return x
 
 class MobileNetV2CustomOutput(nn.Module):

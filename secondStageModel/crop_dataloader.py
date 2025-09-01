@@ -7,14 +7,14 @@ import os
 class ObjectCropDataset(Dataset):
     def __init__(self, image_dir, label_dir, image_size=None, transform=None, require_heading=False):
         """
-        image_dir: Verzeichnis mit den zugehörigen Bildern (muss über Pfad ermittelbar sein)
-        label_dir: Verzeichnis der Label
-        image_size: Originalbildgröße in Pixeln (Breite, Höhe). Wenn None, wird sie beim Laden des Bildes bestimmt.
-        require_heading: wenn True, werden nur Beispiele mit gültigem heading genommen
+        image_dir: directory of images
+        label_dir: directory of label files
+        image_size: original image size (width, height) or None to read from image
+        require_heading: if True, only use entries with valid heading (cos, sin not both zero)
         """
         self.image_dir = image_dir
         self.label_dir = label_dir
-        self.image_size = image_size  # Kann None sein
+        self.image_size = image_size
         self.transform = transform or T.Compose([
             T.Resize((64, 64)),
             T.ToTensor(),
@@ -60,20 +60,17 @@ class ObjectCropDataset(Dataset):
         img_path = os.path.join(self.image_dir, entry["image_name"])
         image = Image.open(img_path).convert("RGB")
 
-        # Bildgröße ggf. automatisch bestimmen
         if self.image_size is None:
             img_w, img_h = image.size
         else:
             img_w, img_h = self.image_size
 
-        # Normierte BBox in absolute Pixel
         x, y, w, h = entry["bbox_norm"]
         cx, cy = x * img_w, y * img_h
         bw, bh = w * img_w, h * img_h
         x1, y1 = int(cx - bw / 2), int(cy - bh / 2)
         x2, y2 = int(cx + bw / 2), int(cy + bh / 2)
 
-        # Crop und Transformation
         crop = image.crop((x1, y1, x2, y2))
         crop = self.transform(crop)
 
@@ -82,10 +79,8 @@ class ObjectCropDataset(Dataset):
         cos = entry["cos"]
         sin = entry["sin"]
 
-        # Distance normalisieren und clippen
         distance_norm = min(distance, 1000.0) / 1000.0
 
-        # Rückgabe als Vektor
         target = torch.tensor([distance_norm, cos, sin], dtype=torch.float32)
 
         return crop, target
