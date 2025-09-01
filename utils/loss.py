@@ -501,7 +501,7 @@ class ComputeLoss:
                 tobj[b, a, gj, gi] = (1.0 - self.gr) + self.gr * iou.detach().clamp(0).type(tobj.dtype)  # iou ratio
 
                 # predicted distance
-                pdist = ps[:, -3].sigmoid()  # assuming the second last element is distance, TODO currently with sigmoid
+                pdist = ps[:, -3].sigmoid()  # assuming the second last element is distance
                 # ldist += self.MSEdist(pdist, distance_targets[b, a, gj, gi])  # You need to ensure indices match here
                 # matched_distance_targets = distance_targets[b]  # This is likely incorrect; you need a correct method here
 
@@ -525,7 +525,6 @@ class ComputeLoss:
                     pheading = ps[valid_heading_mask, -2:]
                     theading = heading_vec[valid_heading_mask]
 
-                    # TODO: which loss for heading?
                     ang_error = sin_cos_angular_error(pheading, theading)
                     lhead += ang_error
 

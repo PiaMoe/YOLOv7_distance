@@ -195,7 +195,6 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
                 heading_rad = np.arctan2(sinh, cosh)  # in radians [-π, π]
                 heading_deg = np.degrees(heading_rad) % 360  # wrap to [0, 360)
                 heading = heading_deg
-                #TODO change in dataset.py as well if you change here and vice versa distances
                 if labels:
                     pass
                     # dist = (dist + 0.0) * np.log(1000) #changed to no negative values

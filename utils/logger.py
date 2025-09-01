@@ -52,7 +52,6 @@ def safe_read_csv(file):
     rows = []
     with open(file, "r") as f:
         for line in f:
-            # Spalten durch Trennzeichen erkennen
             sep = "\t" if "\t" in line else ","
             parts = line.strip().split(sep)
             if len(parts) == 9:
@@ -60,18 +59,18 @@ def safe_read_csv(file):
                     if float(parts[0]) < 200:
                         rows.append([float(x) for x in parts])
                 except ValueError:
-                    continue  # überspringt Zeile mit nicht-konvertierbarem Wert
+                    continue
     return pd.DataFrame(rows, columns=["x", "y", "w", "h", "obj", "class_0", "distance", "cosH", "sinH"])
 
 
 def evaluate_logs(csv_dir):
-    # Alle Dateien holen
+    # take all CSV files
     csv_files = glob.glob(os.path.join(csv_dir, "pred_epoch*_batch*.csv"))
 
-    # Dictionary: epoche -> DataFrame
+    # Dictionary: epoch -> DataFrame
     epoch_data = {}
 
-    # Dateien einlesen und nach Epoche gruppieren
+    # group files by epoch
     for file in csv_files:
         filename = os.path.basename(file)
         match = re.match(r"pred_epoch(\d+)_batch\d+\.csv", filename)
@@ -83,15 +82,13 @@ def evaluate_logs(csv_dir):
                     epoch_data[epoch] = []
                 epoch_data[epoch].append(df)
 
-    # Alle DataFrames pro Epoche zusammenführen
+    # concatenate DataFrames per epoch
     for epoch in epoch_data:
         epoch_data[epoch] = pd.concat(epoch_data[epoch], ignore_index=True)
 
-    # Histogramme plotten
     output_dir = csv_dir.replace("/preds", "/logs")
     os.makedirs(output_dir, exist_ok=True)
 
-    # Plot mit Subplots pro Epoche
     for epoch, df in epoch_data.items():
         print(f"Epoche {epoch}: {len(df)} gültige Einträge")
 
