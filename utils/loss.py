@@ -505,7 +505,6 @@ class ComputeLoss:
                     pheading = ps[valid_heading_mask, -2:]
                     theading = heading_vec[valid_heading_mask]
 
-                    # TODO: which loss for heading?
                     ang_error = sin_cos_angular_error(pheading, theading)
                     lhead += ang_error
 
