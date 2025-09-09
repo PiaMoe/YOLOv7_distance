@@ -5,7 +5,7 @@ import random
 import math
 
 
-w = "../runs/train/finalDataset/B3_singleHead/weights/B3_singleHead_test.onnx"
+w = "../runs/train/finalDataset/B3_singleHead/weights/B3_singleHead_final.onnx"
 
 names = ['boat', 'other']
 colors = {name: [random.randint(0, 255) for _ in range(3)] for name in names}
@@ -31,7 +31,8 @@ def letterbox(im, new_shape=(608, 1088), color=(114,114,114), stride=32):
     return im, r, (dw, dh)
 
 
-cap = cv2.VideoCapture("../../../data/new_downloads/BoatApproachingPort/Video Of Boat Approaching Port.mp4")
+#cap = cv2.VideoCapture("../../../data/new_downloads/BoatApproachingPort/Video Of Boat Approaching Port.mp4")
+cap = cv2.VideoCapture("../../../data/BOArDING_Dataset/testVideos/AmalfiCoastClips.mp4")
 
 def truncate(num, decimals):
     factor = 10.0 ** decimals
@@ -72,12 +73,13 @@ while True:
         x0, y0, x1, y1 = boxes[i]
         cls_id = cls_ids[i]
         score = scores[i]
-        conf = truncate(score, 2)
+        conf = truncate(score, 1)
+        print(score)
 
         # decode distance and heading from confidence
         rest = score - conf
-        distance = int(rest * 1e5)
-        heading = int(truncate((rest * 1e8) % 1000, 0))
+        distance = int(rest * 1e3) * 10  # in meters
+        heading = int(truncate((rest * 1e6) % 1000, 0))
 
         box = np.array([x0, y0, x1, y1])
         box -= np.array(dwdh * 2)
