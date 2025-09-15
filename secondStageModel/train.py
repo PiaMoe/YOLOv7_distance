@@ -16,7 +16,7 @@ def custom_loss(outputs, targets):
     # targets: [batch, 3] -> [distance_norm, cos, sin]
     distance_pred = outputs[:, 0]  # Normalized distance
     distance_true = targets[:, 0]  # Normalized distance
-    distance_loss = nn.functional.mse_loss(distance_pred, distance_true)
+    distance_loss = nn.functional.l1_loss(distance_pred, distance_true)
     heading_pred = outputs[:, 1:3]  # [cos, sin]
     heading_true = targets[:, 1:3]  # [cos, sin]
     cosine_sim = nn.functional.cosine_similarity(heading_pred, heading_true, dim=1)
@@ -34,7 +34,8 @@ def evaluate(model, val_loader, device):
     abs_distance_errors_bins = [[] for _ in range(5)]
     bin_edges = [0, 200, 400, 600, 800, 1000]
     with torch.no_grad():
-        for inputs, targets in val_loader:
+        for batch_idx, (inputs, targets, img_names) in enumerate(val_loader):
+            #for inputs, targets in val_loader:
             inputs, targets = inputs.to(device), targets.to(device)
             outputs = model(inputs)
             loss, distance_loss, heading_loss = custom_loss(outputs, targets)
@@ -87,7 +88,7 @@ def train(train_dataset, val_dataset, epochs=20, name="custom_model"):
     val_loader = DataLoader(val_dataset, batch_size=32, shuffle=True)
 
     #model = CropRegressor()
-    model = MobileNetV2CustomOutput()
+    model = ResNetCustomOutput()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
@@ -109,7 +110,7 @@ def train(train_dataset, val_dataset, epochs=20, name="custom_model"):
         running_loss = 0.0
         running_distance_loss = 0.0
         running_heading_loss = 0.0
-        for batch_idx, (inputs, targets) in enumerate(train_loader):
+        for batch_idx, (inputs, targets, img_names) in enumerate(train_loader):
             inputs, targets = inputs.to(device), targets.to(device)
 
             # save some debug crops from the first epoch
@@ -122,13 +123,14 @@ def train(train_dataset, val_dataset, epochs=20, name="custom_model"):
                     dataset_idx = batch_start + i
                     if dataset_idx >= len(train_dataset):
                         break
-                    img_name = train_dataset.data_list[dataset_idx]["image_name"]
+                    #img_name = train_dataset.data_list[dataset_idx]["image_name"]
+                    img_name = img_names[i]
                     crop = inputs[i].cpu()
                     # Unnormalize: x = x * std + mean
                     crop_unnorm = crop * 0.5 + 0.5
                     vutils.save_image(
                         crop_unnorm,
-                        f"debug_crops/crop_{crops_saved}_{os.path.splitext(img_name)[0]}_{dataset_idx}.png"
+                        f"debug_crops/crop_{crops_saved}_{os.path.splitext(img_name)[0]}.png"
                     )
                     crops_saved += 1
 
@@ -202,7 +204,7 @@ def train(train_dataset, val_dataset, epochs=20, name="custom_model"):
 
 if __name__ == '__main__':
 
-    dataset_path = "/home/pmoessner/data/BOArDING_Dataset/BOArDING_cos_sin/"
+    dataset_path = "/home/pmoessner/data/BOArDING_3/"
 
     dataset_train = ObjectCropDataset(
         label_dir= dataset_path + "train/labels/",
@@ -218,8 +220,8 @@ if __name__ == '__main__':
         require_heading=True
     )
 
-    crop, target = dataset_train[0]
+    crop, target, img_name = dataset_train[0]
     print(crop.shape)  # (3, 64, 64)
     print(target)  # Tensor with [distance, cos, sin]
 
-    train(dataset_train, dataset_val, 100, name="MobileNetV2")
+    train(dataset_train, dataset_val, 300, name="ResNet18_BOArDING3_224")

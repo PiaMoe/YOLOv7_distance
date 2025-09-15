@@ -16,7 +16,7 @@ class ObjectCropDataset(Dataset):
         self.label_dir = label_dir
         self.image_size = image_size
         self.transform = transform or T.Compose([
-            T.Resize((64, 64)),
+            T.Resize((224, 224)),
             T.ToTensor(),
             T.Normalize(mean=[0.5] * 3, std=[0.5] * 3)
         ])
@@ -59,6 +59,7 @@ class ObjectCropDataset(Dataset):
         entry = self.data_list[idx]
         img_path = os.path.join(self.image_dir, entry["image_name"])
         image = Image.open(img_path).convert("RGB")
+        image_name = entry["image_name"]
 
         if self.image_size is None:
             img_w, img_h = image.size
@@ -83,4 +84,4 @@ class ObjectCropDataset(Dataset):
 
         target = torch.tensor([distance_norm, cos, sin], dtype=torch.float32)
 
-        return crop, target
+        return crop, target, image_name
