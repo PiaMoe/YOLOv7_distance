@@ -23,16 +23,18 @@ class DeepStreamOutput(nn.Module):
         class_scores = x[:, :, 5:-3]
         scores, labels = torch.max(class_scores, dim=2, keepdim=True)
         scores = objectness.float() #(scores * objectness).float()
-        scores = torch.round(scores * 100) / 100  # Truncate to two decimal places
+        scores = torch.round(scores * 10) / 10  # Truncate to one decimal place
 
-        distances = x[:, :, -3].round().to(torch.int32).unsqueeze(-1)  # (B, N, 1)
+        distances = x[:, :, -3]
+        distances = torch.round(distances / 10)  # round to 2 places
+        distances = distances.to(torch.int32).unsqueeze(-1)
         sinp = x[:, :, -2]
         cosp = x[:, :, -1]
         heading_deg = (torch.atan2(sinp, cosp) * 180.0 / torch.pi) % 360
         heading_deg = heading_deg.round().to(torch.int32).unsqueeze(-1)  # (B, N, 1)
 
         # encode score, distance into a single float value
-        encoded = scores + distances / 1e5 + heading_deg / 1e8
+        encoded = scores + distances / 1e3 + heading_deg / 1e6
         encoded = encoded.float()
 
         return torch.cat([boxes, encoded, labels.to(boxes.dtype)], dim=-1)

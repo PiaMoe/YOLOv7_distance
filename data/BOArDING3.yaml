@@ -1,0 +1,6 @@
+#yaml file for YOLOv7
+train: /data/pmoessner/BOArDING_3/train/images
+test: /data/pmoessner/BOArDING_3/val/images
+val: /data/pmoessner/BOArDING_3/val/images
+nc: 1
+names: ['boat']

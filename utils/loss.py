@@ -28,12 +28,19 @@ def sin_cos_L2(pred, target):
     dist = torch.norm(pred_norm - target_norm, dim=-1)
     return dist.mean()
 
+def sin_cos_MSE(pred, target):
+    pred_norm = F.normalize(pred, dim=-1)
+    target_norm = F.normalize(target, dim=-1)
+    L = torch.sum((pred_norm - target_norm) ** 2, dim=1)
+    return torch.mean(L)
+
 def sin_cos_angular_error(pred, target):
     pred = F.normalize(pred, dim=-1)
     target = F.normalize(target, dim=-1)
     cos_sim = (pred * target).sum(dim=-1)  # batch-wise dot product
     L = 1.0 - cos_sim  # equivalent to 1 - cos(Δθ)
     return torch.mean(L)
+
 
 class BCEBlurWithLogitsLoss(nn.Module):
     # BCEwithLogitLoss() with reduced missing label effects.
@@ -525,7 +532,7 @@ class ComputeLoss:
                     pheading = ps[valid_heading_mask, -2:]
                     theading = heading_vec[valid_heading_mask]
 
-                    ang_error = sin_cos_L2(pheading, theading)
+                    ang_error = sin_cos_MSE(pheading, theading)
                     lhead += ang_error
 
                 # Classification
