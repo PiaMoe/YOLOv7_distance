@@ -134,13 +134,51 @@ def info_yolov7_models(weights_list):
         print(f"  Non-learnable params: {non_learnable_params:,}")
 
 
+import torch
+import os
+
+
+def compare_model_weights(weight_paths):
+    results = []
+    for path in weight_paths:
+        checkpoint = torch.load(path, map_location="cpu")
+
+        # handle both full checkpoints and state_dicts
+        if "state_dict" in checkpoint:
+            state_dict = checkpoint["state_dict"]
+        else:
+            state_dict = checkpoint
+
+        total_params = 0
+        learnable_params = 0
+        non_learnable_params = 0
+
+        for name, param in state_dict.items():
+            numel = param.numel()
+            total_params += numel
+            if isinstance(param, torch.nn.Parameter) or "weight" in name or "bias" in name:
+                learnable_params += numel
+            else:
+                non_learnable_params += numel
+
+        file_size_mb = os.path.getsize(path) / (1024 ** 2)
+
+        results.append({
+            "model_path": path,
+            "total_params": total_params,
+            "learnable_params": learnable_params,
+            "non_learnable_params": non_learnable_params,
+            "file_size_mb": round(file_size_mb, 2)
+        })
+    return results
+
 
 if __name__ == "__main__":
 
     pt_files = [
-        "../runs/train/finalDataset/B3_freeze50/weights/best.pt"
+        "../runs/train/2-stage/MobileNetv2_B3_64/best.pth"
     ]
-    info_yolov7_models(pt_files)
-    #for res in results:
-    #    print(res)
+    results = compare_model_weights(pt_files)
+    for res in results:
+        print(res)
 
