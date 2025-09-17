@@ -139,6 +139,8 @@ def detect(save_img=False):
                     headings = (torch.atan2(out[:, 2], out[:, 1]) * 180 / torch.pi) % 360
                     det = torch.cat((det, torch.from_numpy(distances).unsqueeze(1).to(det.device), headings.unsqueeze(1).to(det.device)), dim=1)
 
+            t4 = time_synchronized()
+
             if webcam:  # batch_size >= 1
                 p, s, im0, frame = path[i], '%g: ' % i, im0s[i].copy(), dataset.count
             else:
@@ -175,7 +177,8 @@ def detect(save_img=False):
                                      heading=heading)
 
             # Print time (inference + NMS)
-            print(f'{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS')
+            print(f'{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Det Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS',
+                  (f', ({(1E3 * (t4 - t3)):.1f}ms) DH Inference = ({(1E3 * (t4 - t1)):.1f}ms) overall' if len(det) else ''))
 
             # Stream results
             if view_img:
