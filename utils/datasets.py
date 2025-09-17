@@ -495,16 +495,6 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                     nf += 1  # label found
                     with open(lb_file, 'r') as f:
                         l = [x.split() for x in f.read().strip().splitlines()]
-                        # l[-1] = l[-1]/2000
-                        # if len(l)>0:
-                        # scaling distances to in between 0 and 1 where 2km is 1.
-                        # l = [x[:-1] + [str(min(1,float(x[-1])/2000.0))] for x in l]
-                        # l = [x[:-1] + [x[-1]] for x in l]
-                        #     l = [x + [str(31.4)] for x in l]
-                        #     print(l)
-                        # print("WARNING DUMMY DISTANCES ONLY")
-
-                        # l.append(0)
                         if any([len(x) > 8 for x in l]):  # is segment
                             classes = np.array([x[0] for x in l], dtype=np.float32)
                             segments = [np.array(x[1:], dtype=np.float32).reshape(-1, 2) for x in l]  # (cls, xy1...)
@@ -512,8 +502,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                         l = np.array(l, dtype=np.float32)
 
                     if len(l):
-                        assert l.shape[
-                                   1] == 8, 'labels require 7 columns each (5 plus one for distances and 2 for heading)'
+                        assert l.shape[1] == 8, 'labels require 8 columns each (5 plus one for distances and 2 for heading)'
                         # uncomment if all negative labels should be thrown away
                         # currently: distance can be negative but loss won't be computed, sin/cos can be negative
                         # assert (l >= 0).all(), 'negative labels'

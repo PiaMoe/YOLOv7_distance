@@ -224,4 +224,4 @@ if __name__ == '__main__':
     print(crop.shape)  # (3, 64, 64)
     print(target)  # Tensor with [distance, cos, sin]
 
-    train(dataset_train, dataset_val, 300, name="ResNet18_BOArDING3_224")
+    train(dataset_train, dataset_val, 100, name="ResNet18_B3_64")

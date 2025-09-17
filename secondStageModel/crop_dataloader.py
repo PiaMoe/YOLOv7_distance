@@ -16,7 +16,7 @@ class ObjectCropDataset(Dataset):
         self.label_dir = label_dir
         self.image_size = image_size
         self.transform = transform or T.Compose([
-            T.Resize((224, 224)),
+            T.Resize((64, 64)),
             T.ToTensor(),
             T.Normalize(mean=[0.5] * 3, std=[0.5] * 3)
         ])
