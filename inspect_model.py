@@ -1,5 +1,6 @@
 import torch
 from typing import List
+import os
 
 
 def compare_models(pt_paths: List[str], atol=0.0, max_print=5):
@@ -101,10 +102,45 @@ def compare_models(pt_paths: List[str], atol=0.0, max_print=5):
         if len(same_keys_nt) > max_print:
             print(f" ... {len(same_keys_nt) - max_print} more equalities")
 
+import torch
+from pathlib import Path
+
+# from YOLOv7 repo
+from models.experimental import attempt_load
+
+def info_yolov7_models(weights_list):
+    """
+    Prints total, learnable, and non-learnable parameters for YOLOv7 weights.
+
+    Args:
+        weights_list (list[str]): List of paths to YOLOv7 .pt files
+    """
+    for weights_path in weights_list:
+        # Load YOLOv7 model
+        model = attempt_load(weights_path, map_location="cpu")
+        model.eval()
+
+        # Count parameters
+        total_params = sum(p.numel() for p in model.parameters())
+        learnable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        non_learnable_params = total_params - learnable_params
+        file_size_mb = Path(weights_path).stat().st_size / (1024**2)
+
+        # Print info
+        print(f"\nModel: {weights_path}")
+        print(f"  File size: {file_size_mb:.2f} MB")
+        print(f"  Total params: {total_params:,}")
+        print(f"  Learnable params: {learnable_params:,}")
+        print(f"  Non-learnable params: {non_learnable_params:,}")
+
+
 
 if __name__ == "__main__":
+
     pt_files = [
-        "weights/bestDet.pt",
-        "weights/init2.pt"
+        "../runs/train/finalDataset/B3_freeze50/weights/best.pt"
     ]
-    compare_models(pt_files, max_print=15)
+    info_yolov7_models(pt_files)
+    #for res in results:
+    #    print(res)
+
