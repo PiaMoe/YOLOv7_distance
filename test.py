@@ -353,13 +353,14 @@ def test(data,
                                     incorrect_headings += 1
                                 head_pred_and_gt.append([target_head, pred_head])
                                 head_errors_plot.append([target_head, heading_error])
-                                head_conf_and_error_and_gt = [float(pred_conf), heading_error, target_head, pred_head]
+                                head_conf_and_error_and_gt = [float(pred_conf), heading_error, target_head, pred_head,
+                                                              float(target_dist)]
                                 head_errors_per_cat[int(cls)].append(head_conf_and_error_and_gt)
 
                                 records.append({
                                     "confidence": pred_conf,
-                                    "distance error": distance_error,
-                                    "heading error": heading_error,
+                                    "distance error [m]": distance_error,
+                                    "heading error [deg]": heading_error,
                                     "IoU": ious[j],
                                 })
 
@@ -398,8 +399,10 @@ def test(data,
     # Initialize dictionaries to store accumulated weighted errors and total confidences
     mean_dist_err_boat_bins = defaultdict(float)
     abs_dist_err_boat_bins = defaultdict(float)
+    abs_head_err_bins = defaultdict(float)
     total_conf_boat_bins = defaultdict(float)
     samples_per_bin = defaultdict(int)
+    head_samples_per_bin = defaultdict(int)
 
     # Initialize variables to store total accumulated weighted errors and confidences
     total_mean_dist_err_boat= 0 # weighted with conf & relative
@@ -427,6 +430,18 @@ def test(data,
                         samples_per_bin[bin_key] +=1
                         break
 
+    # Heading errors per bin
+    for head_err in head_errors:
+        for class_id, obj_head_pairs in head_err[0].items():
+            for obj_head_pair in obj_head_pairs:
+                hconf, herror, tgt_head, pred_head, gt = obj_head_pair
+                for bin_min, bin_max in distance_bins:
+                    if bin_min <= gt < bin_max:
+                        bin_key = (bin_min, bin_max)
+                        abs_head_err_bins[bin_key] += herror
+                        head_samples_per_bin[bin_key] += 1
+                        break
+
     # same error per class
     dist_class_errs = evaluate_distance_per_class(distance_errors)
 
@@ -450,6 +465,11 @@ def test(data,
         for bin_key in distance_bins
     }
 
+    mean_abs_head_err_boat_bins = {
+        bin_key: abs_head_err_bins[bin_key] / head_samples_per_bin[bin_key]
+        for bin_key in distance_bins
+    }
+
     mean_abs_dist_err_boat = abs_dist_err_boat / samples if samples != 0 else -1
 
     # Calculate the overall weighted mean distance error
@@ -467,7 +487,7 @@ def test(data,
             category_dict = head_errors_per_cat[0]
             for class_id, errors in category_dict.items():
                 for entry in errors:
-                    _, heading_error, _, _ = entry
+                    _, heading_error, _, _, _ = entry
                     total_head_error += heading_error
                     count += 1
     mean_heading_error = total_head_error / count if count > 0 else 0.0
@@ -567,10 +587,12 @@ def test(data,
     if plots:
         # plot distance errors
         plot_dist_err(mean_abs_dist_err_boat_bins, num_samples=samples_per_bin, labelX = 'GT - Distance [m]',
-                    labelY = r'$\varepsilon_A$', path=os.path.join(save_dir, "AbsoluteError.png"), color='red')
+                    labelY = r'absolute distance error', path=os.path.join(save_dir, "AbsoluteError.png"), color='red')
 
         plot_dist_err(weighted_mean_dist_err_boat_bins, num_samples=samples_per_bin, labelX = 'GT - Distance [m]',
-                    labelY = r'$\varepsilon_R$', path=os.path.join(save_dir, "RelativeError.png"))
+                    labelY = r'relative distance error', path=os.path.join(save_dir, "RelativeError.png"))
+        plot_dist_err(mean_abs_head_err_boat_bins, num_samples=head_samples_per_bin, labelX = 'GT - Distance [m]',
+                      labelY= r'absolute heading error', path=os.path.join(save_dir, "MeanHeadingError.png"), color='green')
         
         # plot raw dist errors
         plot_errors(dist_errors_plot, bins=5, max_dist=distance_bins[-1][1], path=os.path.join(save_dir, 'dist_errors.pdf'))

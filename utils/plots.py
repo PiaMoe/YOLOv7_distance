@@ -529,20 +529,49 @@ def plot_skeleton_kpts(im, kpts, steps, orig_shape=None):
         cv2.line(im, pos1, pos2, (int(r), int(g), int(b)), thickness=2)
 
 
-def plot_dist_err(err_results, num_samples = None, labelX = 'GT - Distance [m]', labelY = r'$\varepsilon$', path='err_plot.png', color='blue'):
-    fig, ax = plt.subplots()
-    x = [(x[0] + x[1])/2 for x in err_results]
+def plot_dist_err(err_results, num_samples=None,
+                  labelX='GT - Distance [m]', labelY=r'$\varepsilon$',
+                  path='err_plot.png', color='blue'):
+    if color == 'blue':
+        color = rgb.tue_blue
+    elif color == 'red':
+        color = rgb.tue_red
+
+    fig, ax = plt.subplots(figsize=(5,4), dpi=200)
+
+    # center of bins
+    x = [(x[0] + x[1]) / 2 for x in err_results]
     y = list(err_results.values())
-    bars = ax.bar(x, y, width = 30, color=color)
-    # Annotate each bar with the corresponding sample count
+
+    # width of bins
+    bin_widths = [x[1] - x[0] for x in err_results]
+    bars = ax.bar(x, y, width=[w*0.9 for w in bin_widths], color=color, edgecolor="black", linewidth=1.2)
+
+    # annotate number of samples per bin
     if num_samples is not None:
         for bar, key in zip(bars, num_samples):
-            yval = bar.get_height()  # Get the height of the bar
-            plt.text(bar.get_x() + bar.get_width() / 2, yval, num_samples[key], ha='center', va='bottom')
+            yval = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2, yval + 0.02*max(y),
+                    str(num_samples[key]),
+                    ha='center', va='bottom',
+                    fontsize=10, fontweight='bold')
 
-    ax.set_ylabel(labelY)
-    ax.set_xlabel(labelX)
-    plt.savefig(path)
+    # axes
+    ax.set_ylabel(labelY, fontsize=14)
+    ax.set_xlabel(labelX, fontsize=14)
+    ax.set_ylim(0, max(y) * 1.1)
+
+    ax.tick_params(axis='both', which='major', labelsize=12)
+
+    for spine in ax.spines.values():
+        spine.set_linewidth(1.3)
+
+    # grid lines
+    ax.grid(True, linestyle='--', alpha=0.5, zorder=0)
+
+    plt.tight_layout()
+    plt.savefig(path, dpi=200)
+
 
 def plot_errors(errors, bins, max_dist, path):
     # group errors into bins
@@ -581,12 +610,12 @@ def plot_errors(errors, bins, max_dist, path):
 
     for y,n in zip([0+x for x in range(0, count+1)], [len(grouped_data[k]) for k in grouped_data]):
         ax.axhline(y, color = rgb.tue_dark, alpha = 0.5)
-        t = ax.text(np.max(plotted_errors), y + 0.5, str(n).rjust(3," ") + " samples", color = rgb.tue_dark, va='center', ha = 'right', fontsize = "x-small")
-        t.set_bbox(dict(facecolor='white', alpha=1.0, linewidth=0, pad=1.0))
+        #t = ax.text(np.max(plotted_errors), y + 0.5, str(n).rjust(3," ") + " samples", color = rgb.tue_dark, va='center', ha = 'right', fontsize = "x-small")
+        #t.set_bbox(dict(facecolor='white', alpha=1.0, linewidth=0, pad=1.0))
 
     ax.vlines(x=0, ymin=0, ymax=count+1, colors=rgb.tue_darkgreen, linestyles='dashed', alpha=1, linewidth=1)
-    ax.set_ylabel("Distance Bins")
-    ax.set_xlabel("pred - target [m]")
+    ax.set_ylabel("Distance Bins", fontsize=14)
+    ax.set_xlabel("pred - target [m]", fontsize=14)
     ax.set_ylim(0, count+1)
 
     ax.set_title("Distance Prediction Errors")
@@ -623,7 +652,8 @@ def plot_dist_err_per_class(data, path):
 
 
 def plot_heading_pred(data, path):
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(5,4))
+
     for x in data:
         # Compute angular error (in degrees)
         gt = x[0]
@@ -635,12 +665,19 @@ def plot_heading_pred(data, path):
         ax.plot(gt, pred, 'o', alpha=0.6, color=color, markersize=3, mec='none')
 
     data = np.asarray(data)
-    ax.plot([0, 360], [0, 360], linestyle='--', color=rgb.tue_darkgreen, alpha=1)
+    ax.plot([0, 360], [0, 360], linestyle='--', color=rgb.tue_darkgreen, alpha=1, linewidth=2)
 
-    ax.set_ylabel("Predicted Heading")
-    ax.set_xlabel("Ground Truth Heading")
+    ax.set_ylabel("Predicted Heading [deg]", fontsize=14)
+    ax.set_xlabel("Ground Truth Heading [deg]", fontsize=14)
 
+    ax.tick_params(axis="both", which="major", labelsize=12)
+
+    for spine in ax.spines.values():
+        spine.set_linewidth(1.3)
+
+    plt.tight_layout()
     plt.savefig(path)
+
 
 def plot_heading_err(data, path):
     data = np.asarray(data)  # shape (N, 2): [gt_heading, pred_heading], both in [0, 1)
@@ -700,29 +737,31 @@ def correlations(df, path):
             df[col] = df[col].apply(lambda t: t.detach().cpu().item())
 
     pairs = [
-        ("confidence", "distance error"),
-        ("confidence", "heading error"),
-        ("distance error", "heading error"),
         ("confidence", "IoU"),
-        ("distance error", "IoU"),
-        ("heading error", "IoU")
+        ("confidence", "distance error [m]"),
+        ("confidence", "heading error [deg]")
+        #("distance error [m]", "heading error [deg]"),
+        #("distance error [m]", "IoU"),
+        #("heading error [deg]", "IoU")
     ]
 
-    fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5), dpi=200)
     axes = axes.flatten()
 
     for ax, (x, y) in zip(axes, pairs):
         sns.regplot(
             x=x, y=y, data=df, ax=ax,
-            scatter_kws={"marker": 'o', "alpha": 0.6, "s": 9},
-            line_kws={"color": rgb.tue_red}
+            scatter_kws={"marker": 'o', "alpha": 0.6, "s": 20},
+            line_kws={"color": rgb.tue_red, "linewidth": 2}
         )
-        ax.set_title(f"{x} vs {y}")
-        ax.set_xlabel(x)
-        ax.set_ylabel(y)
+        ax.set_title(f"{x} vs {y}", fontsize=14)
+        ax.set_xlabel(x, fontsize=14)
+        ax.set_ylabel(y, fontsize=14)
+        ax.tick_params(axis="both", which="major", labelsize=11)
 
     plt.tight_layout()
-    plt.savefig(path)
+    plt.savefig(path, dpi=200)
 
 
 if __name__ == '__main__':
