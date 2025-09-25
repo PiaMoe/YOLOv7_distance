@@ -27,9 +27,6 @@ Run `/secondStageModel/train.py`. First, the target image crops will be generate
 
 
 ## Testing
-> [!NOTE]
-> :pushpin: Pretrained Weights are available [here](https://drive.google.com/drive/folders/1GujICE9Ev-ppfH4PUX19UjywqgFn-5Zf?hl=de) 
-
 For testing and inference, a pretrained YOLOv7 model for object detection is needed. Its outputs are the inputs of the "Crop Regressor". You can evaluate the 2-stage-model performance w.r.t. object detection, distance estimation and heading estimation:
 
 ``` shell
