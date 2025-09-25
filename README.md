@@ -53,8 +53,6 @@ Epoch  GPUMem  train_box  train_obj  train_cls  train_dist  train_head total  la
 The generated *results.png* file displays box, objectness, distance and heading loss on the train and validatin set.
 
 ## Testing
-> [!NOTE]
-> :pushpin: Pretrained Weights are available [here](https://drive.google.com/drive/folders/1GujICE9Ev-ppfH4PUX19UjywqgFn-5Zf?hl=de) 
 
 Using the pretrained model, you can evaluate its performance w.r.t. object detection, distance estimation and heading estimation:
 
