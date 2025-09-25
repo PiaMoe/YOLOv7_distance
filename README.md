@@ -56,8 +56,6 @@ Epoch  GPUMem  train_box  train_obj  train_cls  train_dist  total  labels  img_s
 The generated *results.png* file displays box, objectness and distance loss on the train and validatin set.
 
 ## Testing
-> [!NOTE]
-> :pushpin: Pretrained Weights are available [here](https://drive.google.com/drive/folders/1GujICE9Ev-ppfH4PUX19UjywqgFn-5Zf?hl=de) 
 
 Using the pretrained model, you can evaluate its performance w.r.t. object detection and distance estimation:
 
