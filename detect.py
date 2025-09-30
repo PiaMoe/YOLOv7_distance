@@ -162,17 +162,14 @@ def detect(save_img=False):
                             f.write(('%g ' * len(line)).rstrip() % line + '\n')
 
                     if save_img or view_img:  # Add bbox to image
-                        # label = f'{names[int(cls)]} {conf:.2f} {max(0,min(distance*1000,1000)):.2f}'
-                        # label = f'{names[int(cls)]} {conf:.2f} {max(0,min(distance,1000)):.1f}'
-                        # I believe clipping is taken care of in inference yolo, distance
                         label = f'{names[int(cls)]} {conf:.2f} {distance:.1f} {heading:.1f}' if heading else f'{names[int(cls)]} {conf:.2f} {distance:.1f}'
                         color = get_color_based_on_distance(distance)
-                        # plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
                         if color == (0, 250, 250) or distance > 300:
                             txtcolor = [0, 0, 0]
                         else:
                             txtcolor = [255,255,255]
-                        plot_one_box(xyxy, im0, label=label, color=color, line_thickness=1, textcolor=txtcolor, heading=heading)
+                        plotted_heading = heading if distance < 300 else None
+                        plot_one_box(xyxy, im0, label=label, color=color, line_thickness=1, textcolor=txtcolor, heading=plotted_heading)
 
             # Print time (inference + NMS)
             print(f'{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS')

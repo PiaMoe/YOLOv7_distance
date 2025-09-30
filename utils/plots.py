@@ -80,7 +80,7 @@ def plot_one_box(x, img, color=None, label=None, heading=None, line_thickness=3,
         box_diag = math.sqrt(box_w ** 2 + box_h ** 2)
         # dynamic size, but limited
         img_diag = math.sqrt(img.shape[0] ** 2 + img.shape[1] ** 2)
-        arrow_length = max(0.03 * img_diag, min(0.15 * img_diag, box_diag * 0.5))
+        arrow_length = max(0.03 * img_diag, min(0.1 * img_diag, box_diag * 0.5))
         # calculate direction
         end_x = int(center_x + arrow_length * math.sin(rad))
         end_y = int(center_y + arrow_length * math.cos(rad))
